@@ -133,7 +133,7 @@ function _draw()
     --padding = half the difference between the mud size and its smallest grid bounding box,
     --eg, the whitespace if the mud is centered on a bounding grid area
     local padding = (ceil(mud.size/gridsize)*gridsize - mud.size)/2
-    sspr(16, 0, 8, 8, mud.x*gridsize + padding, mud.y*gridsize + padding, mud.size, mud.size)
+    sspr(24, 0, 16, 16, mud.x*gridsize + padding, mud.y*gridsize + padding, mud.size, mud.size)
     
     --text
     print("size: "..mud.size)

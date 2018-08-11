@@ -56,7 +56,7 @@ end
 slime_h = make_hit(4,2,11,7)
 
 --constants
-gridsize = 4 --size of grid for moving in pixels
+--...
 
 --status stuff
 --...
@@ -106,21 +106,28 @@ function spawn(name)
 end
 
 --mud stuff
-mud = {x = 7, y = 7, --x and y as grid values
+mud = {x = 28, y = 28, --x and y as pixel values
+       speed = 4, --step distance in pixels
        size = 8, --mud diameter in pixels
-       growth = 1 --how much to grow each step in pixels
+       growth = 0.5 --how much to grow radius each step in pixels
        }
 
 function move_mud(dir)
     if dir == "up" then
-        mud.y -= 1
+        mud.y -= mud.speed
     elseif dir == "down" then
-        mud.y += 1
+        mud.y += mud.speed
     elseif dir == "left" then
-        mud.x -= 1
+        mud.x -= mud.speed
     elseif dir == "right" then
-        mud.x += 1
+        mud.x += mud.speed
     end
+end
+
+function grow_mud()
+    mud.size += mud.growth*2
+    mud.x -= mud.growth
+    mud.y -= mud.growth
 end
 
 function _draw()
@@ -130,10 +137,10 @@ function _draw()
     map(0, 0, 0, 0, 16, 16)
     
     --mud
-    --padding = half the difference between the mud size and its smallest grid bounding box,
-    --eg, the whitespace if the mud is centered on a bounding grid area
-    local padding = (ceil(mud.size/gridsize)*gridsize - mud.size)/2
-    sspr(24, 0, 16, 16, mud.x*gridsize + padding, mud.y*gridsize + padding, mud.size, mud.size)
+    sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
+    
+    --mud bounding box
+    rect(mud.x, mud.y, mud.x+mud.size-1, mud.y+mud.size-1, 8)
     
     --text
     print("size: "..mud.size)
@@ -146,28 +153,20 @@ function _update()
     end
     
     --move and grow mud
-    local dx, dy = 0, 0
+    local dir = ""
     if btnp(0) then
-        move_mud("left")
-        dx -= 1
+        dir = "left"
+    elseif btnp(1) then
+        dir = "right"
+    elseif btnp(2) then
+        dir = "up"
+    elseif btnp(3) then
+        dir = "down"
     end
-    if btnp(1) then
-        move_mud("right")
-        dx += 1
+    if dir != "" then
+        move_mud(dir)
+        grow_mud()
     end
-    if btnp(2) then
-        move_mud("up")
-        dy -= 1
-    end
-    if btnp(3) then
-        move_mud("down")
-        dy += 1
-    end
-    if dx != 0 then mud.size += mud.growth end
-    if dy != 0 then mud.size += mud.growth end
-    
-    --test stuff
-    --chicksize += 1
 end
 
 __gfx__

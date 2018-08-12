@@ -5,6 +5,20 @@ __lua__
 --by spaghetti time
 --cartdata("jelly and jam")
 
+debug = true
+
+--helper functions
+function array_concat(arrays)
+    --return an array with the elements of all given arrays (should be a shallow copy)
+    local result = {}
+    for array in all(arrays) do
+        for item in all(array) do
+            add(result, item)
+        end
+    end
+    return result
+end
+
 --animation stuff
 function add_sprite(name, anim)
     sprites[name] = {anim=anim, frame=1}
@@ -26,8 +40,10 @@ sprites = {}
 --add_sprite("slime", slime_a)
 
 sprite_map = {none = 0,
+              grass = 65,
               rock = 83,
               floor = 85,
+              puddle = 86,
               goal = 97}
 
 --hitbox stuff
@@ -60,7 +76,8 @@ end
 
 --hitboxes (x1, y1, x2, y2)
 hitbox_map = {rock = make_hitbox(0, 0, 7, 7),
-              goal = make_hitbox(0, 0, 7, 7)}
+              goal = make_hitbox(0, 0, 7, 7),
+              puddle = make_hitbox(0, 0, 7, 7)}
 
 --menu stuff
 menu_items = {"easy", "medium", "hard"}
@@ -102,7 +119,9 @@ function set_hiscores()
 end
 
 --constants
---...
+first_level = 1
+puddle_growth = -5
+
 
 --status stuff
 temp = 0
@@ -110,27 +129,23 @@ temp = 0
 --level stuff
 cur_level = -1
 
-function next_level()
-    cur_level += 1
-    
+function init_level(level)
     --set mud start
-    local mud_start = get_start(cur_level)
-    mud.x, mud.y = mud_start.x, mud_start.y
-    local cel = screen_to_map(mud.x, mud.y, cur_level)
-    mset(cel.cel_x, cel.cel_y, sprite_map.floor)
+    mud.reset(get_start(level))
     
     --set goal
-    goal.reset(get_goal(cur_level))
-    local cel = screen_to_map(goal.x, goal.y, cur_level)
-    mset(cel.cel_x, cel.cel_y, sprite_map.floor)
+    goal.reset(get_goal(level))
     
     --set rocks
-    rocks = get_rocks(cur_level)
+    rocks = get_rocks(level)
+    
+    --set puddles
+    puddles = get_puddles(level)
 end
 
 function start_game()
-    cur_level = 0
-    next_level()
+    cur_level = first_level
+    init_level(cur_level)
 end
 
 --map math
@@ -145,6 +160,13 @@ function screen_to_map(x, y, level)
     local cel_y = flr(level/8)*16 + flr(y/8)
     return {cel_x = cel_x, cel_y = cel_y}
 end
+
+--map under-object tiles
+--key = sprite number of object on map, value = sprite number of tile to draw under object on map
+under = {[sprite_map.none] = sprite_map.floor,
+         [sprite_map.puddle] = sprite_map.floor,
+         [sprite_map.goal] = sprite_map.floor,
+         [sprite_map.rock] = sprite_map.grass}
 
 --map object stuff
 function get_map_objects(name, level)
@@ -184,13 +206,26 @@ function get_goal(level)
     return get_map_objects("goal", cur_level)[1]
 end
 
+function get_puddles(level)
+    --returns a list of puddle objects found on the map for the level
+    return get_map_objects("puddle", cur_level)
+end
+
 --mud stuff
 mud = {name = "mud",
        x = 0, y = 0,
        speed = 4, --step distance in pixels
        size = 8, --diameter in pixels
-       growth = 0.5 --how much to grow radius each step in pixels
+       growth = 0.5, --how much to grow radius each step in pixels
+       alive = true
        }
+
+mud.reset = function(m)
+    mud.x, mud.y =  m.x, m.y
+    mud.size = 8 --todo: set this per level? set this by multiple empty map spaces?
+    mud.growth = 0.5 --todo: same as above
+    mud.alive = true
+end
 
 mud.get_rect = function()
    return make_hitbox(mud.x, mud.y, mud.x+mud.size-1, mud.y+mud.size-1)
@@ -236,6 +271,11 @@ mud.grow = function(amount)
     mud.size += amount*2
     mud.x -= amount
     mud.y -= amount
+    if mud.size <= 0 then mud.kill() end
+end
+
+mud.kill = function()
+    mud.alive = false
 end
 
 --rock stuff
@@ -244,49 +284,70 @@ rocks = {}
 --goal stuff
 goal = {name = "goal",
         x = 0, y = 0,
+        rect = nil,
         collected = false --whether or not the goal has been collected
         }
-goal.get_rect = function()
-                    return get_rect(goal)
-                end
+
 goal.collect = function()
-                   goal.collected = true
-               end
+    goal.collected = true
+end
+
 goal.reset = function(g)
-               goal.x, goal.y = g.x, g.y
-               goal.collected = false
-           end
+    goal.x, goal.y = g.x, g.y
+    goal.collected = false
+    goal.rect = get_rect(goal)
+end
+
+--puddle stuff
+puddles = {}
 
 function _draw()
     cls()
     
-    --background
+    --map
     local cel = screen_to_map(0, 0, cur_level)
     local cel_x = cel.cel_x
     local cel_y = cel.cel_y
     map(cel_x, cel_y, 0, 0, 16, 16)
     
+    --map under objects
+    for map_y = cel_y,cel_y+15 do
+        for map_x = cel_x,cel_x+15 do
+            local sprite = under[mget(map_x, map_y)]
+            if sprite != nil then
+                spr(sprite, map_to_screen(map_x), map_to_screen(map_y))
+            end
+        end
+    end
+    
     --mud
     --todo maybe: if we round the mud's size down to the nearest even number,
     --then it won't wiggle back and forth when moving in a straight line
-    sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
+    if mud.alive then
+        sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
+    end
     
     --goal
     if not goal.collected then
         spr(sprite_map.goal, goal.x, goal.y)
     end
     
+    --map objects (rocks, puddles...)
+    local objects = array_concat({rocks, puddles})
+    for object in all(objects) do
+        spr(sprite_map[object.name], object.x, object.y)
+        if debug then --bounding boxes
+            local r = object.rect
+            rect(r.x1, r.y1, r.x2, r.y2, 11)
+        end
+    end
+    
     --mud bounding box
     local r = mud.get_rect()
     rect(r.x1, r.y1, r.x2, r.y2, 8)
     
-    --rock bounding boxes
-    for rock in all(rocks) do
-        rect(rock.rect.x1, rock.rect.y1, rock.rect.x2, rock.rect.y2, 11)
-    end
-    
     --text
-    print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2)
+    if debug then print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2) end
     --print("temp: "..temp)
 end
 
@@ -299,28 +360,41 @@ function _update()
     --start game, if necessary
     if cur_level < 0 then start_game() end
     
-    --move and grow mud
-    local dir = ""
-    if btnp(0) then
-        dir = "left"
-    elseif btnp(1) then
-        dir = "right"
-    elseif btnp(2) then
-        dir = "up"
-    elseif btnp(3) then
-        dir = "down"
-    end
-    if dir != "" then
-        local moved = mud.move(dir)
-        if moved then
-            mud.grow(mud.growth)
-            --todo: adjust mud position after growth
-        end
-    end
+    --debug reset level
+    if debug and btnp(4) then init_level(cur_level) end
     
-    --collect goal
-    if not goal.collected and collide(mud.get_rect(), goal.get_rect()) then
-        goal.collect()
+    if mud.alive then
+        --move and grow mud
+        local dir = ""
+        if btnp(0) then
+            dir = "left"
+        elseif btnp(1) then
+            dir = "right"
+        elseif btnp(2) then
+            dir = "up"
+        elseif btnp(3) then
+            dir = "down"
+        end
+        if dir != "" then
+            local moved = mud.move(dir)
+            if moved then
+                mud.grow(mud.growth)
+                --todo: adjust mud position after growth
+            end
+        end
+        
+       --collect goal
+        if not goal.collected and collide(mud.get_rect(), goal.rect) then
+            goal.collect()
+        end
+        
+        --collide with puddles
+        for puddle in all(puddles) do
+            if collide(mud.get_rect(), puddle.rect) then
+                del(puddles, puddle)
+                mud.grow(puddle_growth)
+            end
+        end 
     end
 end
 
@@ -392,9 +466,9 @@ ffff11fffff11ffffff11fff00000000000000000000000000000000000000000000000000000000
 __map__
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555535555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55535555005555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555556555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55535656005555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555556555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555535555555555535555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

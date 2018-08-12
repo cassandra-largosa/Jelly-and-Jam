@@ -27,7 +27,8 @@ sprites = {}
 
 sprite_map = {none = 0,
               rock = 83,
-              floor = 85}
+              floor = 85,
+              goal = 97}
 
 --hitbox stuff
 function make_hitbox(x1, y1, x2, y2)
@@ -43,10 +44,11 @@ function make_rect(hitbox, x, y)
 end
 
 function get_rect(object)
-    local name = object.name
-    --if name == "fire"
-        --return make_rect(fire_h, object.x, object.y)
-    --elseif ...
+    if hitbox_map[object.name] != nil then
+        return make_rect(hitbox_map[object.name], object.x, object.y)
+    else
+        return nil
+    end
 end
 
 function collide(r1, r2)
@@ -57,47 +59,8 @@ function collide(r1, r2)
 end
 
 --hitboxes (x1, y1, x2, y2)
-hitbox_map = {rock = make_hitbox(0, 0, 7, 7)}
-
---constants
---...
-
---status stuff
-temp = 0
-
---level stuff
-cur_level = -1
-
-function get_start(level)
-    --returns an object representing where the mud starts for the level
-    return get_map_objects("none", level)[1]
-end
-
-function next_level()
-    cur_level += 1
-    local start = get_start(cur_level)
-    mud.x, mud.y = start.x, start.y
-    local cel = screen_to_map(mud.x, mud.y, cur_level)
-    mset(cel.cel_x, cel.cel_y, sprite_map.floor)
-end
-
-function start_game()
-    cur_level = 0
-    next_level()
-end
-
---map math
-function map_to_screen(cel)
-    --takes a map cell coordinate (x or y), returns the corresponding position on screen (top-left corner)
-    return (cel % 16)*8
-end
-
-function screen_to_map(x, y, level)
-    --takes a screen position, returns the corresponding map cel coordinates for the given level
-    local cel_x = (level % 8)*16 + flr(x/8)
-    local cel_y = flr(level/8)*16 + flr(y/8)
-    return {cel_x = cel_x, cel_y = cel_y}
-end
+hitbox_map = {rock = make_hitbox(0, 0, 7, 7),
+              goal = make_hitbox(0, 0, 7, 7)}
 
 --menu stuff
 menu_items = {"easy", "medium", "hard"}
@@ -138,11 +101,52 @@ function set_hiscores()
     end
 end
 
---object stuff
-function spawn(name)
+--constants
+--...
+
+--status stuff
+temp = 0
+
+--level stuff
+cur_level = -1
+
+function next_level()
+    cur_level += 1
     
+    --set mud start
+    local mud_start = get_start(cur_level)
+    mud.x, mud.y = mud_start.x, mud_start.y
+    local cel = screen_to_map(mud.x, mud.y, cur_level)
+    mset(cel.cel_x, cel.cel_y, sprite_map.floor)
+    
+    --set goal
+    goal.reset(get_goal(cur_level))
+    local cel = screen_to_map(goal.x, goal.y, cur_level)
+    mset(cel.cel_x, cel.cel_y, sprite_map.floor)
+    
+    --set rocks
+    rocks = get_rocks(cur_level)
 end
 
+function start_game()
+    cur_level = 0
+    next_level()
+end
+
+--map math
+function map_to_screen(cel)
+    --takes a map cell coordinate (x or y), returns the corresponding position on screen (top-left corner)
+    return (cel % 16)*8
+end
+
+function screen_to_map(x, y, level)
+    --takes a screen position, returns the corresponding map cel coordinates for the given level
+    local cel_x = (level % 8)*16 + flr(x/8)
+    local cel_y = flr(level/8)*16 + flr(y/8)
+    return {cel_x = cel_x, cel_y = cel_y}
+end
+
+--map object stuff
 function get_map_objects(name, level)
     --returns a list of objects with the given name found on the map for the given level
     local objects = {}
@@ -150,7 +154,6 @@ function get_map_objects(name, level)
     local start_x = cel.cel_x
     local start_y = cel.cel_y
     local sprite = sprite_map[name]
-    local hitbox = hitbox_map[name]
     
     for cel_y = start_y,start_y+15 do
         for cel_x = start_x,start_x+15 do
@@ -158,9 +161,7 @@ function get_map_objects(name, level)
                 local object = {name = name,
                                 x = map_to_screen(cel_x),
                                 y = map_to_screen(cel_y)}
-                if hitbox != nil then
-                    object.rect = make_rect(hitbox, object.x, object.y)
-                end
+                object.rect = get_rect(object)
                 add(objects, object)
             end
         end
@@ -168,17 +169,47 @@ function get_map_objects(name, level)
     return objects
 end
 
+function get_start(level)
+    --returns an object representing where the mud starts for the level
+    return get_map_objects("none", level)[1]
+end
+
+function get_rocks(level)
+    --returns a list of rock objects found on the map for the level
+    return get_map_objects("rock", level)
+end
+
+function get_goal(level)
+    --returns an object representing where the goal is for the level
+    return get_map_objects("goal", cur_level)[1]
+end
+
 --mud stuff
-mud = {x = 0, y = 0, --x and y as pixel values
+mud = {name = "mud",
+       x = 0, y = 0,
        speed = 4, --step distance in pixels
-       size = 8, --mud diameter in pixels
+       size = 8, --diameter in pixels
        growth = 0.5 --how much to grow radius each step in pixels
        }
-mud.get_rect = function()
-                   return make_hitbox(mud.x, mud.y, mud.x+mud.size-1, mud.y+mud.size-1)
-               end
 
-function move_mud(dir)
+mud.get_rect = function()
+   return make_hitbox(mud.x, mud.y, mud.x+mud.size-1, mud.y+mud.size-1)
+end
+
+mud.fits = function()
+    --return whether the mud is allowed to be where it is
+    local mud_rect = mud.get_rect()
+    
+    for rock in all(rocks) do
+        if collide(mud_rect, rock.rect) then
+            return false
+        end
+    end
+    
+    return true
+end
+
+mud.move = function(dir)
     --todo: if the mud can't move all the way, move as close as possible
     local x, y = mud.x, mud.y
     
@@ -192,7 +223,7 @@ function move_mud(dir)
         mud.x += mud.speed
     end
     
-    local moved = mud_fits()
+    local moved = mud.fits()
     if not moved then
         mud.x, mud.y = x, y
     end
@@ -200,20 +231,7 @@ function move_mud(dir)
     return moved
 end
 
-function mud_fits()
-    --return whether the mud is allowed to be where it is
-    local mud_rect = mud.get_rect()
-    
-    for rock in all(get_rocks(cur_level)) do
-        if collide(mud_rect, rock.rect) then
-            return false
-        end
-    end
-    
-    return true
-end
-
-function grow_mud(amount)
+mud.grow = function(amount)
     --increase the mud's radius by amount
     mud.size += amount*2
     mud.x -= amount
@@ -221,9 +239,23 @@ function grow_mud(amount)
 end
 
 --rock stuff
-function get_rocks(level)
-    return get_map_objects("rock", level)
-end
+rocks = {}
+
+--goal stuff
+goal = {name = "goal",
+        x = 0, y = 0,
+        collected = false --whether or not the goal has been collected
+        }
+goal.get_rect = function()
+                    return get_rect(goal)
+                end
+goal.collect = function()
+                   goal.collected = true
+               end
+goal.reset = function(g)
+               goal.x, goal.y = g.x, g.y
+               goal.collected = false
+           end
 
 function _draw()
     cls()
@@ -239,12 +271,17 @@ function _draw()
     --then it won't wiggle back and forth when moving in a straight line
     sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
     
+    --goal
+    if not goal.collected then
+        spr(sprite_map.goal, goal.x, goal.y)
+    end
+    
     --mud bounding box
     local r = mud.get_rect()
     rect(r.x1, r.y1, r.x2, r.y2, 8)
     
     --rock bounding boxes
-    for rock in all(get_rocks(cur_level)) do
+    for rock in all(rocks) do
         rect(rock.rect.x1, rock.rect.y1, rock.rect.x2, rock.rect.y2, 11)
     end
     
@@ -274,11 +311,16 @@ function _update()
         dir = "down"
     end
     if dir != "" then
-        local moved = move_mud(dir)
+        local moved = mud.move(dir)
         if moved then
-            grow_mud(mud.growth)
+            mud.grow(mud.growth)
             --todo: adjust mud position after growth
         end
+    end
+    
+    --collect goal
+    if not goal.collected and collide(mud.get_rect(), goal.get_rect()) then
+        goal.collect()
     end
 end
 
@@ -359,7 +401,7 @@ __map__
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555553555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555535555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555556155555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

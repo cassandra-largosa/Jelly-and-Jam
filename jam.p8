@@ -25,7 +25,9 @@ end
 sprites = {}
 --add_sprite("slime", slime_a)
 
-sprite_map = {rock = 83}
+sprite_map = {none = 0,
+              rock = 83,
+              floor = 85}
 
 --hitbox stuff
 function make_hitbox(x1, y1, x2, y2)
@@ -42,7 +44,7 @@ end
 
 function get_rect(object)
     local name = object.name
-    --if n == "fire"
+    --if name == "fire"
         --return make_rect(fire_h, object.x, object.y)
     --elseif ...
 end
@@ -61,8 +63,41 @@ hitbox_map = {rock = make_hitbox(0, 0, 7, 7)}
 --...
 
 --status stuff
-cur_screen = 1
 temp = 0
+
+--level stuff
+cur_level = -1
+
+function get_start(level)
+    --returns an object representing where the mud starts for the level
+    return get_map_objects("none", level)[1]
+end
+
+function next_level()
+    cur_level += 1
+    local start = get_start(cur_level)
+    mud.x, mud.y = start.x, start.y
+    local cel = screen_to_map(mud.x, mud.y, cur_level)
+    mset(cel.cel_x, cel.cel_y, sprite_map.floor)
+end
+
+function start_game()
+    cur_level = 0
+    next_level()
+end
+
+--map math
+function map_to_screen(cel)
+    --takes a map cell coordinate (x or y), returns the corresponding position on screen (top-left corner)
+    return (cel % 16)*8
+end
+
+function screen_to_map(x, y, level)
+    --takes a screen position, returns the corresponding map cel coordinates for the given level
+    local cel_x = (level % 8)*16 + flr(x/8)
+    local cel_y = flr(level/8)*16 + flr(y/8)
+    return {cel_x = cel_x, cel_y = cel_y}
+end
 
 --menu stuff
 menu_items = {"easy", "medium", "hard"}
@@ -108,21 +143,24 @@ function spawn(name)
     
 end
 
-function get_map_objects(name)
-    --returns a list of objects found on the map
+function get_map_objects(name, level)
+    --returns a list of objects with the given name found on the map for the given level
     local objects = {}
-    local cel_x = (cur_screen % 8)*16
-    local cel_y = flr(cur_screen/8)*16
+    local cel = screen_to_map(0, 0, level)
+    local start_x = cel.cel_x
+    local start_y = cel.cel_y
     local sprite = sprite_map[name]
     local hitbox = hitbox_map[name]
     
-    for y = cel_y,cel_y+15 do
-        for x = cel_x,cel_x+15 do
-            if mget(x, y) == sprite then
+    for cel_y = start_y,start_y+15 do
+        for cel_x = start_x,start_x+15 do
+            if mget(cel_x, cel_y) == sprite then
                 local object = {name = name,
-                                x = (x % 16)*8,
-                                y = (y % 16)*8}
-                object.rect = make_rect(hitbox, object.x, object.y)
+                                x = map_to_screen(cel_x),
+                                y = map_to_screen(cel_y)}
+                if hitbox != nil then
+                    object.rect = make_rect(hitbox, object.x, object.y)
+                end
                 add(objects, object)
             end
         end
@@ -131,7 +169,7 @@ function get_map_objects(name)
 end
 
 --mud stuff
-mud = {x = 32, y = 24, --x and y as pixel values
+mud = {x = 0, y = 0, --x and y as pixel values
        speed = 4, --step distance in pixels
        size = 8, --mud diameter in pixels
        growth = 0.5 --how much to grow radius each step in pixels
@@ -163,9 +201,9 @@ end
 
 function mud_fits()
     --return whether the mud is allowed to be where it is
-    mud_rect = mud.get_rect()
+    local mud_rect = mud.get_rect()
     
-    for rock in all(get_rocks()) do
+    for rock in all(get_rocks(cur_level)) do
         if collide(mud_rect, rock.rect) then
             return false
         end
@@ -181,19 +219,22 @@ function grow_mud()
 end
 
 --rock stuff
-function get_rocks()
-    return get_map_objects("rock")
+function get_rocks(level)
+    return get_map_objects("rock", level)
 end
 
 function _draw()
     cls()
     
     --background
-    local cel_x = (cur_screen % 8)*16
-    local cel_y = flr(cur_screen/8)*16
+    local cel = screen_to_map(0, 0, cur_level)
+    local cel_x = cel.cel_x
+    local cel_y = cel.cel_y
     map(cel_x, cel_y, 0, 0, 16, 16)
     
     --mud
+    --todo maybe: if we round the mud's size down to the nearest even number,
+    --then it won't wiggle back and forth when moving in a straight line
     sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
     
     --mud bounding box
@@ -201,20 +242,23 @@ function _draw()
     rect(r.x1, r.y1, r.x2, r.y2, 8)
     
     --rock bounding boxes
-    for rock in all(get_rocks()) do
+    for rock in all(get_rocks(cur_level)) do
         rect(rock.rect.x1, rock.rect.y1, rock.rect.x2, rock.rect.y2, 11)
     end
     
     --text
-    --print("size: "..mud.size)
-    print("temp: "..temp)
+    print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2)
+    --print("temp: "..temp)
 end
 
 function _update()
-    --animate sprites and bg
+    --animate sprites
     for key,sprite in pairs(sprites) do
         inc_anim(sprite)
     end
+    
+    --start game, if necessary
+    if cur_level < 0 then start_game() end
     
     --move and grow mud
     local dir = ""
@@ -305,7 +349,7 @@ __map__
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555535555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55535555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55535555005555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f55555555535555555555535555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

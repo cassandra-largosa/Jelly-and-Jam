@@ -34,11 +34,11 @@ function make_hitbox(x1, y1, x2, y2)
     return {x1=x1, y1=y1, x2=x2, y2=y2}
 end
 
-function make_rect(hit, x, y)
-    local x1 = hit.x1+x
-    local y1 = hit.y1+y
-    local x2 = hit.x2+x
-    local y2 = hit.y2+y
+function make_rect(hitbox, x, y)
+    local x1 = hitbox.x1+x
+    local y1 = hitbox.y1+y
+    local x2 = hitbox.x2+x
+    local y2 = hitbox.y2+y
     return make_hitbox(x1, y1, x2, y2)
 end
 
@@ -179,6 +179,7 @@ mud.get_rect = function()
                end
 
 function move_mud(dir)
+    --todo: if the mud can't move all the way, move as close as possible
     local x, y = mud.x, mud.y
     
     if dir == "up" then
@@ -212,10 +213,11 @@ function mud_fits()
     return true
 end
 
-function grow_mud()
-    mud.size += mud.growth*2
-    mud.x -= mud.growth
-    mud.y -= mud.growth
+function grow_mud(amount)
+    --increase the mud's radius by amount
+    mud.size += amount*2
+    mud.x -= amount
+    mud.y -= amount
 end
 
 --rock stuff
@@ -274,7 +276,7 @@ function _update()
     if dir != "" then
         local moved = move_mud(dir)
         if moved then
-            grow_mud()
+            grow_mud(mud.growth)
             --todo: adjust mud position after growth
         end
     end

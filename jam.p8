@@ -157,6 +157,7 @@ function init_level(level)
 end
 
 function next_level()
+    sfx(15)
     cur_level += 1
     init_level(cur_level)
 end
@@ -164,6 +165,7 @@ end
 function start_game()
     cur_level = first_level
     init_level(cur_level)
+    music(0)
 end
 
 --map math
@@ -300,6 +302,7 @@ mud.move = function(dir)
     local moved = mud.fits()
     if not moved then
         mud.x, mud.y = x, y
+        sfx(17)
     end
     
     return moved
@@ -315,6 +318,7 @@ end
 
 mud.kill = function()
     mud.alive = false
+    sfx(16)
 end
 
 --rock stuff
@@ -451,24 +455,31 @@ function _update()
        --collect goal
         if not goal.collected and collide(mud.get_rect(), goal.rect) then
             goal.collect()
+            sfx(20)
         end
         
         --break pebbles
         if mud.size >= pebble_break_size then
+            local crushed = false
             for pebble in all(pebbles) do
                 if collide(mud.get_rect(), pebble.rect) then
+                    crushed = true
                     del(pebbles, pebble)
                 end
             end
+            if crushed then sfx(18) end
         end
         
         --collide with puddles
+        local shrunk = false
         for puddle in all(puddles) do
             if collide(mud.get_rect(), puddle.rect) then
+                shrunk = true
                 del(puddles, puddle)
                 mud.grow(puddle_growth)
             end
         end
+        if shrunk then sfx(19) end
         
         --exit
         if goal.collected and mud.size <= exit_size and collide(mud.get_rect(), exit.rect) then

@@ -524,6 +524,8 @@ function _draw()
         print("       you are too heavy.\n")
         print("            the end")
         
+        --ending animation
+        local x, y = 56, 100
         if end_timer <= end_delay then
             palt(0, false)
             palt(7, true)
@@ -567,7 +569,7 @@ function _update()
     end
     
     --debug skip level
-    if debug and btnp(4) then
+    if debug and mode == "game" and btnp(4) then
         next_level()
         return
     end

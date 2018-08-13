@@ -129,7 +129,7 @@ function set_hiscores()
 end
 
 --constants
-first_level = 0
+first_level = 1
 last_level = 17
 mud_speed = 4 --default mud step distance in pixels
 puddle_growth = -5 --amount to grow mud by when it steps in a puddle

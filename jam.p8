@@ -130,7 +130,7 @@ end
 
 --constants
 first_level = 0
-last_level = 31
+last_level = 17
 mud_speed = 4 --default mud step distance in pixels
 puddle_growth = -5 --amount to grow mud by when it steps in a puddle
 pebble_break_size = 16 --minimum mud size required to break a pebble
@@ -546,10 +546,10 @@ function _update()
     end
     
     --debug skip level
-    if btnp(4) then
-        next_level()
-        return
-    end
+    --if btnp(4) then
+    --    next_level()
+    --    return
+    --end
     
     --if mud is not alive, then don't bother updating the game state
     if not mud.alive then return end

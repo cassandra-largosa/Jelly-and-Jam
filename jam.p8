@@ -478,6 +478,7 @@ function _update()
     if not mud.alive then return end
     
     --move and grow mud
+    local moved = false
     local dir = ""
     if btnp(0) then
         dir = "left"
@@ -489,79 +490,80 @@ function _update()
         dir = "down"
     end
     if dir != "" then
-        local moved = mud.move(dir)
-        if moved then
-            if potion > 0 then
-                mud.grow(-mud.growth)
-            elseif snow <= 0 then
-                mud.grow(mud.growth)
+        moved = mud.move(dir)
+    end
+    
+    --update the rest of the game state only if the mud moved
+    if moved then
+        --grow mud
+        if potion > 0 then
+            mud.grow(-mud.growth)
+        elseif snow <= 0 then
+            mud.grow(mud.growth)
+        end
+        --todo: adjust mud position after growth
+        
+        --update timers
+        if potion > 0 then potion -= 1 end
+        if snow > 0 then snow -= 1 end
+        
+        --move spiders and beetles
+        foreach(spiders, move_spider)
+        foreach(beetles, move_beetle)
+        
+        if not mud.alive then return end --if mud is killed (by growth), we're done
+            
+        --collect goal
+        if not goal.collected and collide(mud.get_rect(), goal.rect) then
+            goal.collect()
+            sfx(20)
+        end
+        
+        --break pebbles
+        if mud.size >= pebble_break_size then
+            local crushed = false
+            for pebble in all(pebbles) do
+                if collide(mud.get_rect(), pebble.rect) then
+                    crushed = true
+                    del(pebbles, pebble)
+                end
             end
-            --todo: adjust mud position after growth
-            
-            --update timers if mud moved
-            if potion > 0 then potion -= 1 end
-            if snow > 0 then snow -= 1 end
-            
-            --move spiders and beetles if mud moved
-            foreach(spiders, move_spider)
-            foreach(beetles, move_beetle)
-            
-            --if mud was killed by growth, we're done
-            if not mud.alive then return end
+            if crushed then sfx(18) end
         end
-    end
-    
-    --collect goal
-    if not goal.collected and collide(mud.get_rect(), goal.rect) then
-        goal.collect()
-        sfx(20)
-    end
-    
-    --break pebbles
-    if mud.size >= pebble_break_size then
-        local crushed = false
-        for pebble in all(pebbles) do
-            if collide(mud.get_rect(), pebble.rect) then
-                crushed = true
-                del(pebbles, pebble)
+        
+        --collide with snow
+        for snow in all(snows) do
+            if collide(mud.get_rect(), snow.rect) then
+                add_snow(snow_time)
+                del(snows, snow)
             end
         end
-        if crushed then sfx(18) end
-    end
-    
-    --collide with snow
-    for snow in all(snows) do
-        if collide(mud.get_rect(), snow.rect) then
-            add_snow(snow_time)
-            del(snows, snow)
+        
+        --collide with potions
+        for potion in all(potions) do
+            if collide(mud.get_rect(), potion.rect) then
+                add_potion(potion_time)
+                del(potions, potion)
+            end
         end
-    end
-    
-    --collide with potions
-    for potion in all(potions) do
-        if collide(mud.get_rect(), potion.rect) then
-            add_potion(potion_time)
-            del(potions, potion)
+        
+        --collide with puddles
+        local shrinks = 0
+        for puddle in all(puddles) do
+            if collide(mud.get_rect(), puddle.rect) then
+                shrinks += 1
+                del(puddles, puddle)
+            end
         end
-    end
-    
-    --collide with puddles
-    local shrinks = 0
-    for puddle in all(puddles) do
-        if collide(mud.get_rect(), puddle.rect) then
-            shrinks += 1
-            del(puddles, puddle)
+        if shrinks > 0 then
+            for i = 1,shrinks do
+                mud.grow(puddle_growth)
+            end
+            sfx(19)
         end
-    end
-    if shrinks > 0 then
-        for i = 1,shrinks do
-            mud.grow(puddle_growth)
-        end
-        sfx(19)
-    end
-    
-    --collide with fire
-    if mud.alive then --mud may have been killed, check again
+        if not mud.alive then return end --if mud is killed, we're done
+        
+        --collide with fire
         for fire in all(fires) do
             if collide(mud.get_rect(), fire.rect) then
                 mud.kill()
@@ -569,20 +571,20 @@ function _update()
                 return --if mud is killed, we're done
             end
         end
-    end
-    
-    --collide with bugs
-    for bug in all(array_concat({spiders, beetles})) do
-        if collide(mud.get_rect(), get_rect(bug)) then
-            mud.kill()
-            sfx(24)
-            return --if mud is killed, we're done
+        
+        --collide with bugs
+        for bug in all(array_concat({spiders, beetles})) do
+            if collide(mud.get_rect(), get_rect(bug)) then
+                mud.kill()
+                sfx(24)
+                return --if mud is killed, we're done
+            end
         end
-    end
-    
-    --exit
-    if goal.collected and mud.size <= exit_size and collide(mud.get_rect(), exit.rect) then
-        next_level()
+        
+        --exit
+        if goal.collected and mud.size <= exit_size and collide(mud.get_rect(), exit.rect) then
+            next_level()
+        end
     end
 end
 

@@ -86,7 +86,7 @@ function collide(r1, r2)
 end
 
 --hitboxes (x1, y1, x2, y2)
---most things are default size so i'm not including them
+--most things are default size so I'm not including them
 hitbox_map = {exit = make_hitbox(0, 0, 15, 15)}
 
 --menu stuff
@@ -229,7 +229,7 @@ end
 
 --map under-object tiles
 --key = sprite number of object on map, value = sprite number of tile to draw under object on map
---default value is floor, i'm not including them
+--default value is floor, I'm not including them
 under = {[sprite_map.rock] = sprite_map.sand,
          [sprite_map.pebble] = sprite_map.sand}
 

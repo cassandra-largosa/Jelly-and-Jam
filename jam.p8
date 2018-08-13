@@ -45,6 +45,7 @@ sprite_map = {none = 0,
               exit = 75,
               exit_closed = 75,
               exit_open = 77,
+              sand = 81,
               rock = 83,
               floor = 85,
               puddle = 86,
@@ -191,9 +192,9 @@ end
 under = {[sprite_map.none] = sprite_map.floor,
          [sprite_map.puddle] = sprite_map.floor,
          [sprite_map.goal] = sprite_map.floor,
-         [sprite_map.pebble] = sprite_map.floor,
          [sprite_map.fire] = sprite_map.floor,
-         [sprite_map.rock] = sprite_map.grass}
+         [sprite_map.rock] = sprite_map.sand,
+         [sprite_map.pebble] = sprite_map.sand}
 
 --map object stuff
 function get_map_objects(name, level)
@@ -426,8 +427,10 @@ function _draw()
     end
     
     --mud bounding box
-    local r = mud.get_rect()
-    rect(r.x1, r.y1, r.x2, r.y2, 8)
+    if debug then
+        local r = mud.get_rect()
+        rect(r.x1, r.y1, r.x2, r.y2, 8)
+    end
     
     --text
     if debug then print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2) end
@@ -443,8 +446,17 @@ function _update()
     --start game, if necessary
     if cur_level < 0 then start_game() end
     
-    --debug reset level
-    if debug and btnp(4) then init_level(cur_level) end
+    --reset level
+    if btnp(5) then
+        init_level(cur_level)
+        return
+    end
+    
+    --debug skip level
+    if btnp(4) then
+        next_level()
+        return
+    end
     
     if mud.alive then
         --move and grow mud
@@ -501,6 +513,7 @@ function _update()
             for fire in all(fires) do
                 if collide(mud.get_rect(), fire.rect) then
                     mud.kill()
+                    sfx(24)
                     break
                 end
             end

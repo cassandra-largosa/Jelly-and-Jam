@@ -1,8 +1,8 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
---Clod's Quest
---By Team Spaghetti
+--clod's quest
+--by team spaghetti
 --cartdata("jelly and jam")
 
 debug = false

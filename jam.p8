@@ -50,7 +50,8 @@ sprite_map = {none = 0,
               floor = 85,
               puddle = 86,
               pebble = 90,
-              goal = 97}
+              goal = 97,
+              snow = 100}
 
 --hitbox stuff
 function make_hitbox(x1, y1, x2, y2)
@@ -86,7 +87,8 @@ hitbox_map = {rock = make_hitbox(0, 0, 7, 7),
               exit = make_hitbox(0, 0, 15, 15),
               puddle = make_hitbox(0, 0, 7, 7),
               pebble = make_hitbox(0, 0, 7, 7),
-              fire = make_hitbox(0, 0, 7, 7)}
+              fire = make_hitbox(0, 0, 7, 7),
+              snow = make_hitbox(0, 0, 7, 7)}
 
 --menu stuff
 menu_items = {"easy", "medium", "hard"}
@@ -132,9 +134,15 @@ first_level = 0
 puddle_growth = -5 --amount to grow mud by when it steps in a puddle
 pebble_break_size = 16 --minimum mud size required to break a pebble
 exit_size = 16 --maximum mud size allowed to fit through exit
+snow_time = 10 --number of steps the snow effect lasts for
 
 --status stuff
-temp = 0
+snow = 0
+
+function add_snow(time)
+    snow += time
+    sfx(29)
+end
 
 --level stuff
 cur_level = -1
@@ -160,6 +168,9 @@ function init_level(level)
     
     --set fires
     fires = get_fires(level)
+    
+    --set snows
+    snows = get_snows(level)
 end
 
 function next_level()
@@ -252,6 +263,11 @@ end
 function get_fires(level)
     --returns a list of fire objects found on the map for the level
     return get_map_objects("fire", level)
+end
+
+function get_snows(level)
+    --returns a list of snow objects found on the map for the level
+    return get_map_objects("snow", level)
 end
 
 --mud stuff
@@ -372,6 +388,9 @@ puddles = {}
 --fire stuff
 fires = {}
 
+--snow stuff
+snows = {}
+
 function _draw()
     cls()
     
@@ -387,6 +406,8 @@ function _draw()
             local sprite = under[mget(map_x, map_y)]
             if sprite != nil then
                 spr(sprite, map_to_screen(map_x), map_to_screen(map_y))
+            else --default to floor tile
+                spr(sprite_map.floor, map_to_screen(map_x), map_to_screen(map_y))
             end
         end
     end
@@ -398,7 +419,6 @@ function _draw()
     
     --exit
     palt(0, false)
-    palt(7, true)
     if goal.collected then
         spr(sprite_map.exit_open, exit.x, exit.y, 2, 2)
     else
@@ -407,7 +427,7 @@ function _draw()
     palt()
     
     --map objects (rocks, puddles...)
-    local objects = array_concat({rocks, puddles, pebbles, fires})
+    local objects = array_concat({rocks, puddles, pebbles, fires, snows})
     for object in all(objects) do
         spr(sprite_map[object.name], object.x, object.y)
         if debug then --bounding boxes
@@ -422,7 +442,9 @@ function _draw()
     if mud.alive then
         palt(0, false)
         palt(7, true)
+        if snow > 0 then pal(4, 12) end --brown to blue
         sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
+        pal()
         palt()
     end
     
@@ -434,7 +456,6 @@ function _draw()
     
     --text
     if debug then print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2) end
-    --print("temp: "..temp)
 end
 
 function _update()
@@ -473,8 +494,12 @@ function _update()
         if dir != "" then
             local moved = mud.move(dir)
             if moved then
-                mud.grow(mud.growth)
-                --todo: adjust mud position after growth
+                if snow <= 0 then
+                    mud.grow(mud.growth)
+                    --todo: adjust mud position after growth
+                else
+                    snow -= 1
+                end
             end
         end
         
@@ -494,6 +519,14 @@ function _update()
                 end
             end
             if crushed then sfx(18) end
+        end
+        
+        --collide with snow
+        for snow in all(snows) do
+            if collide(mud.get_rect(), snow.rect) then
+                add_snow(snow_time)
+                del(snows, snow)
+            end
         end
         
         --collide with puddles

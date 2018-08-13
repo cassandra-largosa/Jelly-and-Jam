@@ -51,6 +51,7 @@ sprite_map = {none = 0,
               puddle = 86,
               pebble = 90,
               goal = 97,
+              leaf = 99,
               snow = 100,
               potion = 104,
               spider = 115,
@@ -136,10 +137,10 @@ snow_time = 10 --number of steps the snow effect lasts for
 potion_time = 10 --number of steps the potion effect lasts for
 spider_speed = 8 --number of pixels spiders move per step
 beetle_speed = 8 --number of pixels beetles move per step
+leaf_mult = 2 --how much the leaf multiplies the mud's speed by
+leaf_time = 10 --number of steps the leaf effect lasts for
 
 --status stuff
---...
-
 function add_snow(time)
     snow += time
     sfx(29)
@@ -150,13 +151,19 @@ function add_potion(time)
     sfx(27)
 end
 
+function add_leaf(time)
+    leaf += time
+    sfx(22)
+end
+
 --level stuff
 cur_level = -1
 
 function init_level(level)
-    --set statuses
+    --set timers
     snow = 0
     potion = 0
+    leaf = 0
     
     --set objects from map
     mud.reset(get_map_objects("none", level)[1])
@@ -168,6 +175,7 @@ function init_level(level)
     fires = get_map_objects("fire", level)
     snows = get_map_objects("snow", level)
     potions = get_map_objects("potion", level)
+    leafs = get_map_objects("leaf", level)
     
     spiders = get_map_objects("spider", level)
     for spider in all(spiders) do
@@ -280,15 +288,17 @@ end
 mud.move = function(dir)
     --todo: if the mud can't move all the way, move as close as possible
     local x, y = mud.x, mud.y
+    local speed = mud.speed
+    if leaf > 0 then speed *= leaf_mult end
     
     if dir == "up" then
-        mud.y -= mud.speed
+        mud.y -= speed
     elseif dir == "down" then
-        mud.y += mud.speed
+        mud.y += speed
     elseif dir == "left" then
-        mud.x -= mud.speed
+        mud.x -= speed
     elseif dir == "right" then
-        mud.x += mud.speed
+        mud.x += speed
     end
     
     local moved = mud.fits()
@@ -360,6 +370,10 @@ snow = 0 --snow timer
 potions = {}
 potion = 0 --potion timer
 
+--leaf stuff
+leafs = {}
+leaf = 0 --leaf timer
+
 --spider stuff
 spiders = {}
 
@@ -422,7 +436,8 @@ function _draw()
     palt()
     
     --map objects (rocks, puddles...)
-    local objects = array_concat({rocks, puddles, pebbles, fires, snows, potions, spiders, beetles})
+    local objects = array_concat({rocks, puddles, pebbles, fires, snows,
+                                  potions, spiders, beetles, leafs})
     for object in all(objects) do
         spr(sprite_map[object.name], object.x, object.y)
         if debug then --bounding boxes
@@ -437,7 +452,14 @@ function _draw()
     if mud.alive then
         palt(0, false)
         palt(7, true)
-        if snow > 0 or potion > 0 then pal(4, 12) end --brown to blue
+        if snow > 0 or potion > 0 then
+            pal(4, 12) --brown to light blue
+            pal(2, 1) --purple to dark blue
+            pal(1, 13) --dark blue to... uh... grey?
+        elseif leaf > 0 then
+            pal(4, 11) --brown to light green
+            pal(2, 3) --purple to dark green
+        end
         sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
         pal()
         palt()
@@ -478,6 +500,7 @@ function _update()
     if not mud.alive then return end
     
     --move and grow mud
+    local moved = false
     local dir = ""
     if btnp(0) then
         dir = "left"
@@ -489,79 +512,89 @@ function _update()
         dir = "down"
     end
     if dir != "" then
-        local moved = mud.move(dir)
-        if moved then
-            if potion > 0 then
-                mud.grow(-mud.growth)
-            elseif snow <= 0 then
-                mud.grow(mud.growth)
+        moved = mud.move(dir)
+    end
+    
+    --update the rest of the game state only if the mud moved
+    if moved then
+        --grow mud
+        if potion > 0 then
+            mud.grow(-mud.growth)
+        elseif snow <= 0 then
+            mud.grow(mud.growth)
+        end
+        --todo: adjust mud position after growth
+        
+        --update timers
+        if potion > 0 then potion -= 1 end
+        if snow > 0 then snow -= 1 end
+        if leaf > 0 then leaf -= 1 end
+        
+        --move spiders and beetles
+        foreach(spiders, move_spider)
+        foreach(beetles, move_beetle)
+        
+        if not mud.alive then return end --if mud is killed (by growth), we're done
+            
+        --collect goal
+        if not goal.collected and collide(mud.get_rect(), goal.rect) then
+            goal.collect()
+            sfx(20)
+        end
+        
+        --break pebbles
+        if mud.size >= pebble_break_size then
+            local crushed = false
+            for pebble in all(pebbles) do
+                if collide(mud.get_rect(), pebble.rect) then
+                    crushed = true
+                    del(pebbles, pebble)
+                end
             end
-            --todo: adjust mud position after growth
-            
-            --update timers if mud moved
-            if potion > 0 then potion -= 1 end
-            if snow > 0 then snow -= 1 end
-            
-            --move spiders and beetles if mud moved
-            foreach(spiders, move_spider)
-            foreach(beetles, move_beetle)
-            
-            --if mud was killed by growth, we're done
-            if not mud.alive then return end
+            if crushed then sfx(18) end
         end
-    end
-    
-    --collect goal
-    if not goal.collected and collide(mud.get_rect(), goal.rect) then
-        goal.collect()
-        sfx(20)
-    end
-    
-    --break pebbles
-    if mud.size >= pebble_break_size then
-        local crushed = false
-        for pebble in all(pebbles) do
-            if collide(mud.get_rect(), pebble.rect) then
-                crushed = true
-                del(pebbles, pebble)
+        
+        --collide with snow
+        for snow in all(snows) do
+            if collide(mud.get_rect(), snow.rect) then
+                add_snow(snow_time)
+                del(snows, snow)
             end
         end
-        if crushed then sfx(18) end
-    end
-    
-    --collide with snow
-    for snow in all(snows) do
-        if collide(mud.get_rect(), snow.rect) then
-            add_snow(snow_time)
-            del(snows, snow)
+        
+        --collide with potions
+        for potion in all(potions) do
+            if collide(mud.get_rect(), potion.rect) then
+                add_potion(potion_time)
+                del(potions, potion)
+            end
         end
-    end
-    
-    --collide with potions
-    for potion in all(potions) do
-        if collide(mud.get_rect(), potion.rect) then
-            add_potion(potion_time)
-            del(potions, potion)
+        
+        --collide with leafs
+        for leaf in all(leafs) do
+            if collide(mud.get_rect(), leaf.rect) then
+                add_leaf(leaf_time)
+                del(leafs, leaf)
+            end
         end
-    end
-    
-    --collide with puddles
-    local shrinks = 0
-    for puddle in all(puddles) do
-        if collide(mud.get_rect(), puddle.rect) then
-            shrinks += 1
-            del(puddles, puddle)
+        
+        --collide with puddles
+        local shrinks = 0
+        for puddle in all(puddles) do
+            if collide(mud.get_rect(), puddle.rect) then
+                shrinks += 1
+                del(puddles, puddle)
+            end
         end
-    end
-    if shrinks > 0 then
-        for i = 1,shrinks do
-            mud.grow(puddle_growth)
+        if shrinks > 0 then
+            for i = 1,shrinks do
+                mud.grow(puddle_growth)
+            end
+            sfx(19)
         end
-        sfx(19)
-    end
-    
-    --collide with fire
-    if mud.alive then --mud may have been killed, check again
+        if not mud.alive then return end --if mud is killed, we're done
+        
+        --collide with fire
         for fire in all(fires) do
             if collide(mud.get_rect(), fire.rect) then
                 mud.kill()
@@ -569,20 +602,20 @@ function _update()
                 return --if mud is killed, we're done
             end
         end
-    end
-    
-    --collide with bugs
-    for bug in all(array_concat({spiders, beetles})) do
-        if collide(mud.get_rect(), get_rect(bug)) then
-            mud.kill()
-            sfx(24)
-            return --if mud is killed, we're done
+        
+        --collide with bugs
+        for bug in all(array_concat({spiders, beetles})) do
+            if collide(mud.get_rect(), get_rect(bug)) then
+                mud.kill()
+                sfx(24)
+                return --if mud is killed, we're done
+            end
         end
-    end
-    
-    --exit
-    if goal.collected and mud.size <= exit_size and collide(mud.get_rect(), exit.rect) then
-        next_level()
+        
+        --exit
+        if goal.collected and mud.size <= exit_size and collide(mud.get_rect(), exit.rect) then
+            next_level()
+        end
     end
 end
 

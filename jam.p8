@@ -141,9 +141,11 @@ spider_speed = 8 --number of pixels spiders move per step
 beetle_speed = 8 --number of pixels beetles move per step
 leaf_mult = 2 --how much the leaf multiplies the mud's speed by
 leaf_time = 10 --number of steps the leaf effect lasts for
+end_delay = 30 --number of frames between each transition in the ending
 
 --status stuff
 mode = "title" --title, game, end
+end_timer = 0
 
 function add_snow(time)
     snow += time
@@ -521,6 +523,25 @@ function _draw()
         print(" you are unable to move, because\n")
         print("       you are too heavy.\n")
         print("            the end")
+        
+        if end_timer <= end_delay then
+            palt(0, false)
+            palt(7, true)
+            spr(8, x-4, y-16, 3, 3)
+            palt()
+        elseif end_timer <= end_delay*2 then
+            spr(5, x-4, y-16, 3, 3)
+        elseif end_timer <= end_delay*3 then
+            spr(3, x, y-8, 2, 2)
+        elseif end_timer <= end_delay*4 then
+            spr(1, x, y-8, 2, 2)
+        elseif end_timer <= end_delay*5 then
+            spr(33, x, y-8, 2, 2)
+        elseif end_timer <= end_delay*6 then
+            spr(35, x, y-8, 2, 2)
+        else
+            spr(11, x, y-8, 2, 2)
+        end
     end
 end
 
@@ -546,10 +567,12 @@ function _update()
     end
     
     --debug skip level
-    --if btnp(4) then
-    --    next_level()
-    --    return
-    --end
+    if debug and btnp(4) then
+        next_level()
+        return
+    end
+    
+    if mode == "end" then end_timer += 1 end
     
     --if mud is not alive, then don't bother updating the game state
     if not mud.alive then return end

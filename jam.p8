@@ -398,7 +398,6 @@ function _draw()
     
     --exit
     palt(0, false)
-    palt(7, true)
     if goal.collected then
         spr(sprite_map.exit_open, exit.x, exit.y, 2, 2)
     else

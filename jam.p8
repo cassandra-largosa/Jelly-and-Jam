@@ -51,8 +51,11 @@ sprite_map = {none = 0,
               puddle = 86,
               pebble = 90,
               goal = 97,
+              leaf = 99,
               snow = 100,
-              potion = 104}
+              potion = 104,
+              spider = 115,
+              beetle = 117}
 
 --hitbox stuff
 function make_hitbox(x1, y1, x2, y2)
@@ -70,8 +73,8 @@ end
 function get_rect(object)
     if hitbox_map[object.name] != nil then
         return make_rect(hitbox_map[object.name], object.x, object.y)
-    else
-        return nil
+    else --default hitbox is 8x8
+        return make_rect(make_hitbox(0, 0, 7, 7), object.x, object.y)
     end
 end
 
@@ -83,14 +86,8 @@ function collide(r1, r2)
 end
 
 --hitboxes (x1, y1, x2, y2)
-hitbox_map = {rock = make_hitbox(0, 0, 7, 7),
-              goal = make_hitbox(0, 0, 7, 7),
-              exit = make_hitbox(0, 0, 15, 15),
-              puddle = make_hitbox(0, 0, 7, 7),
-              pebble = make_hitbox(0, 0, 7, 7),
-              fire = make_hitbox(0, 0, 7, 7),
-              snow = make_hitbox(0, 0, 7, 7),
-              potion = make_hitbox(0, 0, 7, 7)}
+--most things are default size so i'm not including them
+hitbox_map = {exit = make_hitbox(0, 0, 15, 15)}
 
 --menu stuff
 menu_items = {"easy", "medium", "hard"}
@@ -133,14 +130,20 @@ end
 
 --constants
 first_level = 0
+last_level = 31
+mud_speed = 4 --default mud step distance in pixels
 puddle_growth = -5 --amount to grow mud by when it steps in a puddle
 pebble_break_size = 16 --minimum mud size required to break a pebble
 exit_size = 16 --maximum mud size allowed to fit through exit
 snow_time = 10 --number of steps the snow effect lasts for
 potion_time = 10 --number of steps the potion effect lasts for
+spider_speed = 8 --number of pixels spiders move per step
+beetle_speed = 8 --number of pixels beetles move per step
+leaf_mult = 2 --how much the leaf multiplies the mud's speed by
+leaf_time = 10 --number of steps the leaf effect lasts for
 
 --status stuff
---...
+mode = "title" --title, game, end
 
 function add_snow(time)
     snow += time
@@ -152,35 +155,63 @@ function add_potion(time)
     sfx(27)
 end
 
+function add_leaf(time)
+    leaf += time
+    sfx(22)
+end
+
 --level stuff
 cur_level = -1
 
 function init_level(level)
-    --set statuses
+    --set timers
     snow = 0
+    potion = 0
+    leaf = 0
     
     --set objects from map
-    mud.reset(get_start(level))
-    goal.reset(get_goal(level))
-    exit.reset(get_exit(level))
-    rocks = get_rocks(level)
-    puddles = get_puddles(level)
-    pebbles = get_pebbles(level)
-    fires = get_fires(level)
-    snows = get_snows(level)
-    potions = get_potions(level)
+    mud.reset(get_map_objects("none", level)[1])
+    goal.reset(get_map_objects("goal", level)[1])
+    exit.reset(get_map_objects("exit", level)[1])
+    rocks = get_map_objects("rock", level)
+    puddles = get_map_objects("puddle", level)
+    pebbles = get_map_objects("pebble", level)
+    fires = get_map_objects("fire", level)
+    snows = get_map_objects("snow", level)
+    potions = get_map_objects("potion", level)
+    leafs = get_map_objects("leaf", level)
+    
+    spiders = get_map_objects("spider", level)
+    for spider in all(spiders) do
+        spider.dir = 1
+    end
+    
+    beetles = get_map_objects("beetle", level)
+    for beetle in all(beetles) do
+        beetle.dir = 1
+    end
 end
 
 function next_level()
     sfx(15)
     cur_level += 1
-    init_level(cur_level)
+    if cur_level > last_level then
+        end_game()
+    else
+        init_level(cur_level)
+    end
 end
 
 function start_game()
+    mode = "game"
     cur_level = first_level
     init_level(cur_level)
     music(0)
+end
+
+function end_game()
+    mode = "end"
+    music(5)
 end
 
 --map math
@@ -198,11 +229,8 @@ end
 
 --map under-object tiles
 --key = sprite number of object on map, value = sprite number of tile to draw under object on map
-under = {[sprite_map.none] = sprite_map.floor,
-         [sprite_map.puddle] = sprite_map.floor,
-         [sprite_map.goal] = sprite_map.floor,
-         [sprite_map.fire] = sprite_map.floor,
-         [sprite_map.rock] = sprite_map.sand,
+--default value is floor, i'm not including them
+under = {[sprite_map.rock] = sprite_map.sand,
          [sprite_map.pebble] = sprite_map.sand}
 
 --map object stuff
@@ -228,55 +256,10 @@ function get_map_objects(name, level)
     return objects
 end
 
-function get_start(level)
-    --returns an object representing where the mud starts for the level
-    return get_map_objects("none", level)[1]
-end
-
-function get_rocks(level)
-    --returns a list of rock objects found on the map for the level
-    return get_map_objects("rock", level)
-end
-
-function get_goal(level)
-    --returns an object representing where the goal is for the level
-    return get_map_objects("goal", level)[1]
-end
-
-function get_exit(level)
-    --returns an object representing where the exit is for the level
-    return get_map_objects("exit", level)[1]
-end
-
-function get_puddles(level)
-    --returns a list of puddle objects found on the map for the level
-    return get_map_objects("puddle", level)
-end
-
-function get_pebbles(level)
-    --returns a list of pebble objects found on the map for the level
-    return get_map_objects("pebble", level)
-end
-
-function get_fires(level)
-    --returns a list of fire objects found on the map for the level
-    return get_map_objects("fire", level)
-end
-
-function get_snows(level)
-    --returns a list of snow objects found on the map for the level
-    return get_map_objects("snow", level)
-end
-
-function get_potions(level)
-    --returns a list of potion objects found on the map for the level
-    return get_map_objects("potion", level)
-end
-
 --mud stuff
 mud = {name = "mud",
        x = 0, y = 0,
-       speed = 4, --step distance in pixels
+       speed = mud_speed,
        size = 8, --diameter in pixels
        growth = 0.5, --how much to grow radius each step in pixels
        alive = true
@@ -319,15 +302,17 @@ end
 mud.move = function(dir)
     --todo: if the mud can't move all the way, move as close as possible
     local x, y = mud.x, mud.y
+    local speed = mud.speed
+    if leaf > 0 then speed *= leaf_mult end
     
     if dir == "up" then
-        mud.y -= mud.speed
+        mud.y -= speed
     elseif dir == "down" then
-        mud.y += mud.speed
+        mud.y += speed
     elseif dir == "left" then
-        mud.x -= mud.speed
+        mud.x -= speed
     elseif dir == "right" then
-        mud.x += mud.speed
+        mud.x += speed
     end
     
     local moved = mud.fits()
@@ -399,71 +384,144 @@ snow = 0 --snow timer
 potions = {}
 potion = 0 --potion timer
 
+--leaf stuff
+leafs = {}
+leaf = 0 --leaf timer
+
+--spider stuff
+spiders = {}
+
+function move_spider(spider)
+    spider.x += spider.dir*spider_speed
+    for rock in all(array_concat({rocks, pebbles})) do
+        if collide(get_rect(spider), rock.rect) then
+            spider.dir *= -1
+            spider.x += 2*spider.dir*spider_speed
+        end
+    end
+end
+
+--beetle stuff
+beetles = {}
+
+function move_beetle(beetle)
+    beetle.y += beetle.dir*beetle_speed
+    for rock in all(array_concat({rocks, pebbles})) do
+        if collide(get_rect(beetle), rock.rect) then
+            beetle.dir *= -1
+            beetle.y += 2*beetle.dir*beetle_speed
+        end
+    end
+end
+
 function _draw()
     cls()
     
-    --map
-    local cel = screen_to_map(0, 0, cur_level)
-    local cel_x = cel.cel_x
-    local cel_y = cel.cel_y
-    map(cel_x, cel_y, 0, 0, 16, 16)
-    
-    --map under objects
-    for map_y = cel_y,cel_y+15 do
-        for map_x = cel_x,cel_x+15 do
-            local sprite = under[mget(map_x, map_y)]
-            if sprite != nil then
-                spr(sprite, map_to_screen(map_x), map_to_screen(map_y))
-            else --default to floor tile
-                spr(sprite_map.floor, map_to_screen(map_x), map_to_screen(map_y))
+    if mode == "title" then
+        print("           game title\n")
+        
+        print("get  , go to     while small\n\n")
+        spr(sprite_map.goal, 12, 11)
+        spr(sprite_map.exit_closed, 50, 7, 2, 2)
+        
+        print("collect\n")
+        spr(sprite_map.puddle, 31, 28)
+        spr(sprite_map.leaf, 41, 28)
+        spr(sprite_map.snow, 51, 28)
+        spr(sprite_map.potion, 61, 28)
+        
+        print("break   while big\n")
+        spr(sprite_map.pebble, 22, 40)
+        
+        print("avoid\n")
+        spr(sprite_map.fire, 24, 52)
+        spr(sprite_map.spider, 34, 52)
+        spr(sprite_map.beetle, 44, 52)
+        
+        print("don't shrink down to nothing\n")
+        print("use arrow keys to move mud ball\n")
+        print("press x to reset level\n")
+        print("press x to start game")
+    elseif mode == "game" then
+        --map
+        local cel = screen_to_map(0, 0, cur_level)
+        local cel_x = cel.cel_x
+        local cel_y = cel.cel_y
+        map(cel_x, cel_y, 0, 0, 16, 16)
+        
+        --map under objects
+        for map_y = cel_y,cel_y+15 do
+            for map_x = cel_x,cel_x+15 do
+                local sprite = under[mget(map_x, map_y)]
+                if sprite != nil then
+                    spr(sprite, map_to_screen(map_x), map_to_screen(map_y))
+                else --default to floor tile
+                    spr(sprite_map.floor, map_to_screen(map_x), map_to_screen(map_y))
+                end
             end
         end
-    end
-    
-    --goal
-    if not goal.collected then
-        spr(sprite_map.goal, goal.x, goal.y)
-    end
-    
-    --exit
-    palt(0, false)
-    if goal.collected then
-        spr(sprite_map.exit_open, exit.x, exit.y, 2, 2)
-    else
-        spr(sprite_map.exit_closed, exit.x, exit.y, 2, 2)
-    end
-    palt()
-    
-    --map objects (rocks, puddles...)
-    local objects = array_concat({rocks, puddles, pebbles, fires, snows, potions})
-    for object in all(objects) do
-        spr(sprite_map[object.name], object.x, object.y)
-        if debug then --bounding boxes
-            local r = object.rect
-            rect(r.x1, r.y1, r.x2, r.y2, 11)
+        
+        --goal
+        if not goal.collected then
+            spr(sprite_map.goal, goal.x, goal.y)
         end
-    end
-    
-    --mud
-    --todo maybe: if we round the mud's size down to the nearest even number,
-    --then it won't wiggle back and forth when moving in a straight line
-    if mud.alive then
+        
+        --exit
         palt(0, false)
-        palt(7, true)
-        if snow > 0 or potion > 0 then pal(4, 12) end --brown to blue
-        sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
-        pal()
+        if goal.collected then
+            spr(sprite_map.exit_open, exit.x, exit.y, 2, 2)
+        else
+            spr(sprite_map.exit_closed, exit.x, exit.y, 2, 2)
+        end
         palt()
+        
+        --map objects (rocks, puddles...)
+        local objects = array_concat({rocks, puddles, pebbles, fires, snows,
+                                      potions, spiders, beetles, leafs})
+        for object in all(objects) do
+            spr(sprite_map[object.name], object.x, object.y)
+            if debug then --bounding boxes
+                local r = object.rect
+                rect(r.x1, r.y1, r.x2, r.y2, 11)
+            end
+        end
+        
+        --mud
+        --todo maybe: if we round the mud's size down to the nearest even number,
+        --then it won't wiggle back and forth when moving in a straight line
+        if mud.alive then
+            palt(0, false)
+            palt(7, true)
+            if snow > 0 or potion > 0 then
+                pal(4, 12) --brown to light blue
+                pal(2, 1) --purple to dark blue
+                pal(1, 13) --dark blue to... uh... grey?
+            elseif leaf > 0 then
+                pal(4, 11) --brown to light green
+                pal(2, 3) --purple to dark green
+            end
+            sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
+            pal()
+            palt()
+        end
+        
+        --mud bounding box
+        if debug then
+            local r = mud.get_rect()
+            rect(r.x1, r.y1, r.x2, r.y2, 8)
+        end
+        
+        --text
+        if debug then print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2) end
+    elseif mode == "end" then
+        print("        victory is yours.\n")
+        print("you have collected the pieces of\n")
+        print("    the philosopher's stone.\n")
+        print(" you are now made of solid gold.\n")
+        print(" you are unable to move, because\n")
+        print("       you are too heavy.\n")
+        print("            the end")
     end
-    
-    --mud bounding box
-    if debug then
-        local r = mud.get_rect()
-        rect(r.x1, r.y1, r.x2, r.y2, 8)
-    end
-    
-    --text
-    if debug then print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2) end
 end
 
 function _update()
@@ -472,8 +530,14 @@ function _update()
         inc_anim(sprite)
     end
     
-    --start game, if necessary
-    if cur_level < 0 then start_game() end
+    --start game
+    if mode == "title" then
+        if btnp(5) then
+            start_game()
+        else
+            return --no need to do anything else on the title screen
+        end
+    end
     
     --reset level
     if btnp(5) then
@@ -487,34 +551,47 @@ function _update()
         return
     end
     
-    if mud.alive then
-        --move and grow mud
-        local dir = ""
-        if btnp(0) then
-            dir = "left"
-        elseif btnp(1) then
-            dir = "right"
-        elseif btnp(2) then
-            dir = "up"
-        elseif btnp(3) then
-            dir = "down"
+    --if mud is not alive, then don't bother updating the game state
+    if not mud.alive then return end
+    
+    --move and grow mud
+    local moved = false
+    local dir = ""
+    if btnp(0) then
+        dir = "left"
+    elseif btnp(1) then
+        dir = "right"
+    elseif btnp(2) then
+        dir = "up"
+    elseif btnp(3) then
+        dir = "down"
+    end
+    if dir != "" then
+        moved = mud.move(dir)
+    end
+    
+    --update the rest of the game state only if the mud moved
+    if moved then
+        --grow mud
+        if potion > 0 then
+            mud.grow(-mud.growth)
+        elseif snow <= 0 then
+            mud.grow(mud.growth)
         end
-        if dir != "" then
-            local moved = mud.move(dir)
-            if moved then
-                if potion > 0 then
-                    mud.grow(-mud.growth)
-                elseif snow <= 0 then
-                    mud.grow(mud.growth)
-                end
-                --todo: adjust mud position after growth
-                --update timers if mud moved
-                if potion > 0 then potion -= 1 end
-                if snow > 0 then snow -= 1 end
-            end
-        end
+        --todo: adjust mud position after growth
         
-       --collect goal
+        --update timers
+        if potion > 0 then potion -= 1 end
+        if snow > 0 then snow -= 1 end
+        if leaf > 0 then leaf -= 1 end
+        
+        --move spiders and beetles
+        foreach(spiders, move_spider)
+        foreach(beetles, move_beetle)
+        
+        if not mud.alive then return end --if mud is killed (by growth), we're done
+            
+        --collect goal
         if not goal.collected and collide(mud.get_rect(), goal.rect) then
             goal.collect()
             sfx(20)
@@ -548,33 +625,51 @@ function _update()
             end
         end
         
-        --collide with puddles
-        local shrunk = false
-        for puddle in all(puddles) do
-            if collide(mud.get_rect(), puddle.rect) then
-                shrunk = true
-                del(puddles, puddle)
-                mud.grow(puddle_growth)
+        --collide with leafs
+        for leaf in all(leafs) do
+            if collide(mud.get_rect(), leaf.rect) then
+                add_leaf(leaf_time)
+                del(leafs, leaf)
             end
         end
-        if shrunk then sfx(19) end
+        
+        --collide with puddles
+        local shrinks = 0
+        for puddle in all(puddles) do
+            if collide(mud.get_rect(), puddle.rect) then
+                shrinks += 1
+                del(puddles, puddle)
+            end
+        end
+        if shrinks > 0 then
+            for i = 1,shrinks do
+                mud.grow(puddle_growth)
+            end
+            sfx(19)
+        end
+        if not mud.alive then return end --if mud is killed, we're done
         
         --collide with fire
-        if mud.alive then --mud may have been killed, check again
-            for fire in all(fires) do
-                if collide(mud.get_rect(), fire.rect) then
-                    mud.kill()
-                    sfx(24)
-                    break
-                end
+        for fire in all(fires) do
+            if collide(mud.get_rect(), fire.rect) then
+                mud.kill()
+                sfx(24)
+                return --if mud is killed, we're done
+            end
+        end
+        
+        --collide with bugs
+        for bug in all(array_concat({spiders, beetles})) do
+            if collide(mud.get_rect(), get_rect(bug)) then
+                mud.kill()
+                sfx(24)
+                return --if mud is killed, we're done
             end
         end
         
         --exit
-        if mud.alive then --mud may have been killed, check again
-            if goal.collected and mud.size <= exit_size and collide(mud.get_rect(), exit.rect) then
-                next_level()
-            end
+        if goal.collected and mud.size <= exit_size and collide(mud.get_rect(), exit.rect) then
+            next_level()
         end
     end
 end
@@ -647,9 +742,9 @@ ffff11fffff11ffffff11fff008dd8007811118722dddd2200000000000000000000000000000000
 __map__
 5353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353
 535555555555555555555555555555535355555553555555555555555555555353555555555555555555555555555553535655555555555555555555555561535300555556555555555555555555555353555555555a555555555a5555556153535a5a5a5a5a5a4b555a5a5a5a5a5a5353555a5a5a5a5a5a5a5a5a5a5a5a5553
-535555555555555555555555555555535355555555555555555655555555555353555555555555555555555555555553535555555555555555555555555555535355555556555555555555555555555353555555555a555555555a555555555353555a5a5a5a5a55555a5a5a5a5a555353555a56555555555555556455550053
+535555555555555555555555555555535355555555555555555655555555555353555555555555555555555555555553535555555555555555555555555555535355555555555555555555555555555353555555555a555555555a555555555353555a5a5a5a5a55555a5a5a5a5a555353555a56555555555555556455550053
 535555555555556455555555555555535353555500555555555555555555555353555555555555565555555555555553535555555555555555555555555555535355555556555555555555555555555353555555555a555555555a55555555535355555a5a5a5a5a5a5a5a5a5a5a555353555a55555555555555555555555553
-535555555555555555555555555555535355555555554b5555565555555555535355565555555555555555555655555353555555555555555555555a5a5a5a5353565656565555555555555555555553535555555553555555555a5555555553535555555a555a5a5a555a5a5a55555353555a55555a5a5a5a5a5a5a5a5a5553
+535555555555555555555555555555535355555555554b5555565555555555535355565555555555555555555655555353555555555555555555555a5a5a5a5353565556555555555555555555555553535555555553555555555a5555555553535555555a555a5a5a555a5a5a55555353555a55555a5a5a5a5a5a5a5a5a5553
 5355555555555555555555555555555353555555555555555555555555555553535555555555555555555555555555535355555555535353535355555555555353555555555555555555555555555553535555555553556455555a55555555535355555556555555555555555555555353555a55555a55555555555555555553
 53555555555655555555555555555553535555555a555555555553555555555353555555555555555555555555555553535655555555554b555555555655555353555555555555555555555555555553535555555553555555555a55555555535355555655555556555555555556555353555a55555a554b5555555555555553
 53555555555555555555555555555553535555555555555555555555555555535355555555555555555555555555555353565555555555555555555555555553535a5a5a5a5a535353535a5a5a5a5a53535555555553555555555355555555535355555555555655555555555655555353555a56555a55555555555555555553
@@ -657,8 +752,8 @@ __map__
 535555555555555555555555555555535355555555555555555555555355555353555655555555555555555561555553535555555555555555555555555555535355555555555353535355555555555353555555555a555555555355565655535355555555555555555655555555555353555a55555a555a5a55555555555553
 53555555555a555555555555555555535355555553555555555555555555555353555555555555555555555555555553535a5a5a5a5a5a5a5a5a5a5a5a5a5a535355555555555555555555555555555353555555555a555555555355565655535355555655555555615555555555555353555a55555a5a555555555555555553
 53555555555555555555555555555553535555555555565561555555555555535355555555555555555555554b555553535555555555555555555555555555535355555555555555555555555555555353555555555a555656555a55555555535355565555555555555555555555555353555a55555555555555555555555553
-535555555555555555555555555555535355555555555555555555555555555353555555555555565555555555555553535556565656565656565656565655535355555555555555555555555656565353555555555a555656555a55555555535355555555555555555555555556555353555a56555555555655555555556153
-53555555555555555555555555555553535555555555555555555555555555535355555555555555555555555555555353555656565656565656565656565553535555555555555555555555564b5553534b5555555a555555555a55555555535355555555565555555555555655555353555a5a5a5a5a5a5a5a5a5a5a5a5553
+535555555555555555555555555555535355555555555555555555555555555353555555555555565555555555555553535555565556555655565556555655535355555555555555565555555656565353555555555a555656555a55555555535355555555555555555555555556555353555a56555555555655555555556153
+53555555555555555555555555555553535555555555555555555555555555535355555555555555555555555555555353555655565556555655565556555553535555555555555555555555564b5553534b5555555a555555555a55555555535355555555565555555555555655555353555a5a5a5a5a5a5a5a5a5a5a5a5553
 535555555555555555555555555555535355555555555555555555555555555353555555555555555555555555555553535555555555555555555555555555535361555555555555555555555655555353555555555a555555555a55555555535355555556555500555555555555555353555555565555565555565555565553
 5353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353
 5353535353535353535353535353535300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -700,14 +795,14 @@ __sfx__
 0101000020f5227f522df5231f5236f5221f5227f522bf522df521cf5234f5222f5229f5231f5236f5233f5201f523df5222f0221f021ff021cf021af0218f0216f0215c001370011700101000e1000d0000c000
 010100001185030850308503085030850308503085000800008000080000800008003b850398503b850008003c8503c8503c8503c8503c8503c8503c850008000080000800008000080000800008000080000800
 000100003e7503e750000003e7503e750000003d750000000000037750377500000037750377503775000000000003c7503c75000000000003c7503b75000000000003a7500000000000000003b7503975000000
-000300001e0502305027050290502e050310503c0503d050240500e050220502b0503b0503f0501f05018050090500f0501905021050330503d0503f0502605016050220502e050390503d0500f0002200036000
+00030000040500a05010050170500a0500f050160501e0500f050160501c05026050190501e050250502c0501d050260502e05036050280502d050340503d0503f0003d0000200001000010000f0002200036000
 0001000002e5004e5007e5007e5006e5005e5003e5003e5004e5006e5007e5008e5008e5006e5005e5004e5002e5001e5001e5002e5002e5022e0024e0001e0004e0007e000ee000be000ee0010e000ce0015e00
 010300003c6443c6453c6343c6343c6253c6243c6253c615300053000530005300053000500004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00010000323502e3502a35027350253502235021350223502435025350273502635024350213501e3501a350173501535014350123501235015350193501c3501d3501e3501e3501d3501b3501a3501735014350
 0001000036550335502e5502e550195501b5501e5501f550225501e55016550145502b5502e5503455034550325502d5502b55025550215501f55035550315502f55024550275502b55030550355503a5503d550
 0002000014f5038f5038f5016f5037f501ef5037f5037f501af5039f5027f5037f5037f502ff5038f5020f5030f5025f5027f503af502af503bf503bf502ef5037f502ef5034f5025f5038f501ef501bf503df50
 00010000182501c250292502e250302001b2501e25032200332502c2503925039250372501d20020250242502c2502c25022200222002420025200262002720025200292002b2002b2002d2002d2002f20032200
-0004000034b5039a5034a502da5026a5024a502ea5037a503ea503fa5031b5036a502fa5028a5022a501ca5000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0004000034c5039c5034c502dc5026c5024c5027c502bc5032c5036c503bc503fc503cc5038c5034c502ec5000c0000c0000c0000c00000000000000000000000000000000000000000000000000000000000000
 013200001a55018550135501555011550115500c5500e5501155015550135500c5501555015550135501355015550155501855018550165501655015550155501a5501c55021550215501c5501c5501855018550
 0132000015550155501a5501c5501f550215501d550215501f5501d5501c5501f5501d5501d5501a5501c5501d5502255022550215501f5501d550185501a5500000000000000000000000000000000000000000
 __music__

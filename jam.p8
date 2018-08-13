@@ -51,7 +51,8 @@ sprite_map = {none = 0,
               puddle = 86,
               pebble = 90,
               goal = 97,
-              snow = 100}
+              snow = 100,
+              potion = 104}
 
 --hitbox stuff
 function make_hitbox(x1, y1, x2, y2)
@@ -88,7 +89,8 @@ hitbox_map = {rock = make_hitbox(0, 0, 7, 7),
               puddle = make_hitbox(0, 0, 7, 7),
               pebble = make_hitbox(0, 0, 7, 7),
               fire = make_hitbox(0, 0, 7, 7),
-              snow = make_hitbox(0, 0, 7, 7)}
+              snow = make_hitbox(0, 0, 7, 7),
+              potion = make_hitbox(0, 0, 7, 7)}
 
 --menu stuff
 menu_items = {"easy", "medium", "hard"}
@@ -135,42 +137,38 @@ puddle_growth = -5 --amount to grow mud by when it steps in a puddle
 pebble_break_size = 16 --minimum mud size required to break a pebble
 exit_size = 16 --maximum mud size allowed to fit through exit
 snow_time = 10 --number of steps the snow effect lasts for
+potion_time = 10 --number of steps the potion effect lasts for
 
 --status stuff
-snow = 0
+--...
 
 function add_snow(time)
     snow += time
     sfx(29)
 end
 
+function add_potion(time)
+    potion += time
+    sfx(27)
+end
+
 --level stuff
 cur_level = -1
 
 function init_level(level)
-    --set mud start
+    --set statuses
+    snow = 0
+    
+    --set objects from map
     mud.reset(get_start(level))
-    
-    --set goal
     goal.reset(get_goal(level))
-    
-    --set exit
     exit.reset(get_exit(level))
-    
-    --set rocks
     rocks = get_rocks(level)
-    
-    --set puddles
     puddles = get_puddles(level)
-    
-    --set pebbles
     pebbles = get_pebbles(level)
-    
-    --set fires
     fires = get_fires(level)
-    
-    --set snows
     snows = get_snows(level)
+    potions = get_potions(level)
 end
 
 function next_level()
@@ -268,6 +266,11 @@ end
 function get_snows(level)
     --returns a list of snow objects found on the map for the level
     return get_map_objects("snow", level)
+end
+
+function get_potions(level)
+    --returns a list of potion objects found on the map for the level
+    return get_map_objects("potion", level)
 end
 
 --mud stuff
@@ -390,6 +393,11 @@ fires = {}
 
 --snow stuff
 snows = {}
+snow = 0 --snow timer
+
+--potion stuff
+potions = {}
+potion = 0 --potion timer
 
 function _draw()
     cls()
@@ -427,7 +435,7 @@ function _draw()
     palt()
     
     --map objects (rocks, puddles...)
-    local objects = array_concat({rocks, puddles, pebbles, fires, snows})
+    local objects = array_concat({rocks, puddles, pebbles, fires, snows, potions})
     for object in all(objects) do
         spr(sprite_map[object.name], object.x, object.y)
         if debug then --bounding boxes
@@ -442,7 +450,7 @@ function _draw()
     if mud.alive then
         palt(0, false)
         palt(7, true)
-        if snow > 0 then pal(4, 12) end --brown to blue
+        if snow > 0 or potion > 0 then pal(4, 12) end --brown to blue
         sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
         pal()
         palt()
@@ -494,12 +502,15 @@ function _update()
         if dir != "" then
             local moved = mud.move(dir)
             if moved then
-                if snow <= 0 then
+                if potion > 0 then
+                    mud.grow(-mud.growth)
+                elseif snow <= 0 then
                     mud.grow(mud.growth)
-                    --todo: adjust mud position after growth
-                else
-                    snow -= 1
                 end
+                --todo: adjust mud position after growth
+                --update timers if mud moved
+                if potion > 0 then potion -= 1 end
+                if snow > 0 then snow -= 1 end
             end
         end
         
@@ -529,6 +540,14 @@ function _update()
             end
         end
         
+        --collide with potions
+        for potion in all(potions) do
+            if collide(mud.get_rect(), potion.rect) then
+                add_potion(potion_time)
+                del(potions, potion)
+            end
+        end
+        
         --collide with puddles
         local shrunk = false
         for puddle in all(puddles) do
@@ -539,7 +558,6 @@ function _update()
             end
         end
         if shrunk then sfx(19) end
-        
         
         --collide with fire
         if mud.alive then --mud may have been killed, check again

@@ -307,20 +307,26 @@ mud.move = function(dir)
     local speed = mud.speed
     if leaf > 0 then speed *= leaf_mult end
     
-    if dir == "up" then
-        mud.y -= speed
-    elseif dir == "down" then
-        mud.y += speed
-    elseif dir == "left" then
-        mud.x -= speed
-    elseif dir == "right" then
-        mud.x += speed
-    end
+    local moved = false
+    for i = 1,speed do
+        if dir == "up" then
+            mud.y -= 1
+        elseif dir == "down" then
+            mud.y += 1
+        elseif dir == "left" then
+            mud.x -= 1
+        elseif dir == "right" then
+            mud.x += 1
+        end
     
-    local moved = mud.fits()
-    if not moved then
-        mud.x, mud.y = x, y
-        sfx(17)
+        if mud.fits() then
+            moved = true
+            x, y = mud.x, mud.y
+        else
+            mud.x, mud.y = x, y
+            sfx(17)
+            break
+        end
     end
     
     return moved
@@ -332,6 +338,26 @@ mud.grow = function(amount)
     mud.x -= amount
     mud.y -= amount
     if mud.size <= 0 then mud.kill() end
+end
+
+mud.adjust = function(growth)
+    --adjust the mud's position after growing by growth if it is inside a solid object
+    --which of the 4 cardinal directions the mud is stuck in
+    local left, right, up, down = false, false, false, false
+    local mud_rect = mud.get_rect()
+    for rock in all(array_concat({rocks, pebbles})) do
+        if collide(mud_rect, rock.rect) then
+            if rock.rect.x1 < mud_rect.x1 then left = true end
+            if rock.rect.x2 > mud_rect.x2 then right = true end
+            if rock.rect.y1 < mud_rect.y1 then up = true end
+            if rock.rect.y2 > mud_rect.y2 then down = true end
+        end
+    end
+    
+    if up and not down then mud.y += growth end
+    if down and not up then mud.y -= growth end
+    if left and not right then mud.x += growth end
+    if right and not left then mud.x -= growth end
 end
 
 mud.kill = function()
@@ -598,12 +624,13 @@ function _update()
     --update the rest of the game state only if the mud moved
     if moved then
         --grow mud
+        local growth = 0
         if potion > 0 then
-            mud.grow(-mud.growth)
+            growth = -mud.growth
         elseif snow <= 0 then
-            mud.grow(mud.growth)
+            growth = mud.growth
         end
-        --todo: adjust mud position after growth
+        mud.grow(growth)
         
         --update timers
         if potion > 0 then potion -= 1 end
@@ -615,12 +642,6 @@ function _update()
         foreach(beetles, move_beetle)
         
         if not mud.alive then return end --if mud is killed (by growth), we're done
-            
-        --collect goal
-        if not goal.collected and collide(mud.get_rect(), goal.rect) then
-            goal.collect()
-            sfx(20)
-        end
         
         --break pebbles
         if mud.size >= pebble_break_size then
@@ -632,6 +653,15 @@ function _update()
                 end
             end
             if crushed then sfx(18) end
+        end
+        
+        --adjust mud's position only after breaking pebbles
+        mud.adjust(growth)
+        
+        --collect goal
+        if not goal.collected and collide(mud.get_rect(), goal.rect) then
+            goal.collect()
+            sfx(20)
         end
         
         --collide with snow

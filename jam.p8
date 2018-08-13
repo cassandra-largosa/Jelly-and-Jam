@@ -130,6 +130,8 @@ end
 
 --constants
 first_level = 0
+last_level = 31
+mud_speed = 4 --default mud step distance in pixels
 puddle_growth = -5 --amount to grow mud by when it steps in a puddle
 pebble_break_size = 16 --minimum mud size required to break a pebble
 exit_size = 16 --maximum mud size allowed to fit through exit
@@ -141,6 +143,8 @@ leaf_mult = 2 --how much the leaf multiplies the mud's speed by
 leaf_time = 10 --number of steps the leaf effect lasts for
 
 --status stuff
+mode = "title" --title, game, end
+
 function add_snow(time)
     snow += time
     sfx(29)
@@ -191,13 +195,23 @@ end
 function next_level()
     sfx(15)
     cur_level += 1
-    init_level(cur_level)
+    if cur_level > last_level then
+        end_game()
+    else
+        init_level(cur_level)
+    end
 end
 
 function start_game()
+    mode = "game"
     cur_level = first_level
     init_level(cur_level)
     music(0)
+end
+
+function end_game()
+    mode = "end"
+    music(5)
 end
 
 --map math
@@ -245,7 +259,7 @@ end
 --mud stuff
 mud = {name = "mud",
        x = 0, y = 0,
-       speed = 4, --step distance in pixels
+       speed = mud_speed,
        size = 8, --diameter in pixels
        growth = 0.5, --how much to grow radius each step in pixels
        alive = true
@@ -403,76 +417,111 @@ end
 function _draw()
     cls()
     
-    --map
-    local cel = screen_to_map(0, 0, cur_level)
-    local cel_x = cel.cel_x
-    local cel_y = cel.cel_y
-    map(cel_x, cel_y, 0, 0, 16, 16)
-    
-    --map under objects
-    for map_y = cel_y,cel_y+15 do
-        for map_x = cel_x,cel_x+15 do
-            local sprite = under[mget(map_x, map_y)]
-            if sprite != nil then
-                spr(sprite, map_to_screen(map_x), map_to_screen(map_y))
-            else --default to floor tile
-                spr(sprite_map.floor, map_to_screen(map_x), map_to_screen(map_y))
+    if mode == "title" then
+        print("           game title\n")
+        
+        print("get  , go to     while small\n\n")
+        spr(sprite_map.goal, 12, 11)
+        spr(sprite_map.exit_closed, 50, 7, 2, 2)
+        
+        print("collect\n")
+        spr(sprite_map.puddle, 31, 28)
+        spr(sprite_map.leaf, 41, 28)
+        spr(sprite_map.snow, 51, 28)
+        spr(sprite_map.potion, 61, 28)
+        
+        print("break   while big\n")
+        spr(sprite_map.pebble, 22, 40)
+        
+        print("avoid\n")
+        spr(sprite_map.fire, 24, 52)
+        spr(sprite_map.spider, 34, 52)
+        spr(sprite_map.beetle, 44, 52)
+        
+        print("don't shrink down to nothing\n")
+        print("use arrow keys to move mud ball\n")
+        print("press x to reset level\n")
+        print("press x to start game")
+    elseif mode == "game" then
+        --map
+        local cel = screen_to_map(0, 0, cur_level)
+        local cel_x = cel.cel_x
+        local cel_y = cel.cel_y
+        map(cel_x, cel_y, 0, 0, 16, 16)
+        
+        --map under objects
+        for map_y = cel_y,cel_y+15 do
+            for map_x = cel_x,cel_x+15 do
+                local sprite = under[mget(map_x, map_y)]
+                if sprite != nil then
+                    spr(sprite, map_to_screen(map_x), map_to_screen(map_y))
+                else --default to floor tile
+                    spr(sprite_map.floor, map_to_screen(map_x), map_to_screen(map_y))
+                end
             end
         end
-    end
-    
-    --goal
-    if not goal.collected then
-        spr(sprite_map.goal, goal.x, goal.y)
-    end
-    
-    --exit
-    palt(0, false)
-    if goal.collected then
-        spr(sprite_map.exit_open, exit.x, exit.y, 2, 2)
-    else
-        spr(sprite_map.exit_closed, exit.x, exit.y, 2, 2)
-    end
-    palt()
-    
-    --map objects (rocks, puddles...)
-    local objects = array_concat({rocks, puddles, pebbles, fires, snows,
-                                  potions, spiders, beetles, leafs})
-    for object in all(objects) do
-        spr(sprite_map[object.name], object.x, object.y)
-        if debug then --bounding boxes
-            local r = object.rect
-            rect(r.x1, r.y1, r.x2, r.y2, 11)
+        
+        --goal
+        if not goal.collected then
+            spr(sprite_map.goal, goal.x, goal.y)
         end
-    end
-    
-    --mud
-    --todo maybe: if we round the mud's size down to the nearest even number,
-    --then it won't wiggle back and forth when moving in a straight line
-    if mud.alive then
+        
+        --exit
         palt(0, false)
-        palt(7, true)
-        if snow > 0 or potion > 0 then
-            pal(4, 12) --brown to light blue
-            pal(2, 1) --purple to dark blue
-            pal(1, 13) --dark blue to... uh... grey?
-        elseif leaf > 0 then
-            pal(4, 11) --brown to light green
-            pal(2, 3) --purple to dark green
+        if goal.collected then
+            spr(sprite_map.exit_open, exit.x, exit.y, 2, 2)
+        else
+            spr(sprite_map.exit_closed, exit.x, exit.y, 2, 2)
         end
-        sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
-        pal()
         palt()
+        
+        --map objects (rocks, puddles...)
+        local objects = array_concat({rocks, puddles, pebbles, fires, snows,
+                                      potions, spiders, beetles, leafs})
+        for object in all(objects) do
+            spr(sprite_map[object.name], object.x, object.y)
+            if debug then --bounding boxes
+                local r = object.rect
+                rect(r.x1, r.y1, r.x2, r.y2, 11)
+            end
+        end
+        
+        --mud
+        --todo maybe: if we round the mud's size down to the nearest even number,
+        --then it won't wiggle back and forth when moving in a straight line
+        if mud.alive then
+            palt(0, false)
+            palt(7, true)
+            if snow > 0 or potion > 0 then
+                pal(4, 12) --brown to light blue
+                pal(2, 1) --purple to dark blue
+                pal(1, 13) --dark blue to... uh... grey?
+            elseif leaf > 0 then
+                pal(4, 11) --brown to light green
+                pal(2, 3) --purple to dark green
+            end
+            sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
+            pal()
+            palt()
+        end
+        
+        --mud bounding box
+        if debug then
+            local r = mud.get_rect()
+            rect(r.x1, r.y1, r.x2, r.y2, 8)
+        end
+        
+        --text
+        if debug then print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2) end
+    elseif mode == "end" then
+        print("        victory is yours.\n")
+        print("you have collected the pieces of\n")
+        print("    the philosopher's stone.\n")
+        print(" you are now made of solid gold.\n")
+        print(" you are unable to move, because\n")
+        print("       you are too heavy.\n")
+        print("            the end")
     end
-    
-    --mud bounding box
-    if debug then
-        local r = mud.get_rect()
-        rect(r.x1, r.y1, r.x2, r.y2, 8)
-    end
-    
-    --text
-    if debug then print("size: "..mud.size.." x: "..mud.x.." y: "..mud.y, 0, 0, 2) end
 end
 
 function _update()
@@ -481,8 +530,14 @@ function _update()
         inc_anim(sprite)
     end
     
-    --start game, if necessary
-    if cur_level < first_level then start_game() end
+    --start game
+    if mode == "title" then
+        if btnp(5) then
+            start_game()
+        else
+            return --no need to do anything else on the title screen
+        end
+    end
     
     --reset level
     if btnp(5) then

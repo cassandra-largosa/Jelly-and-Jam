@@ -688,7 +688,7 @@ function _update()
     end
     
     --reset level
-    if btnp(5) then
+    if mode == "game" and btnp(5) then
         init_level(cur_level)
         return
     end

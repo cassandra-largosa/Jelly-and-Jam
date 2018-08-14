@@ -462,7 +462,7 @@ function _draw()
     cls()
     
     if mode == "title" then
-        print("           clod's quest\n")
+        print("          clod's quest\n")
         
         print("get  , go to     while small\n\n")
         spr(sprite_map.goal, 12, 11)
@@ -621,7 +621,7 @@ function _update()
     --if mud is not alive, then don't bother updating the game state
     if not mud.alive then return end
     
-    --move and grow mud
+    --move mud
     local moved = false
     local dir = ""
     if btnp(0) then
@@ -639,15 +639,6 @@ function _update()
     
     --update the rest of the game state only if the mud moved
     if moved then
-        --grow mud
-        local growth = 0
-        if potion > 0 then
-            growth = -mud.growth
-        elseif snow <= 0 then
-            growth = mud.growth
-        end
-        mud.grow(growth)
-        
         --update timers
         if potion > 0 then potion -= 1 end
         if snow > 0 then snow -= 1 end
@@ -656,8 +647,6 @@ function _update()
         --move spiders and beetles
         foreach(spiders, move_spider)
         foreach(beetles, move_beetle)
-        
-        if not mud.alive then return end --if mud is killed (by growth), we're done
         
         --break pebbles
         if mud.size >= pebble_break_size then
@@ -671,7 +660,18 @@ function _update()
             if crushed then sfx(18) end
         end
         
-        --adjust mud's position only after breaking pebbles
+        --grow mud
+        local growth = 0
+        if potion > 0 then
+            growth = -mud.growth
+        elseif snow <= 0 then
+            growth = mud.growth
+        end
+        mud.grow(growth)
+        
+        if not mud.alive then return end --if mud is killed (by growth), we're done
+        
+        --adjust mud
         mud.adjust(growth)
         
         --collect goal

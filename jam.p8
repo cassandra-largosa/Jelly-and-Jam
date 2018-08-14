@@ -26,7 +26,11 @@ end
 
 function get_sprite(name)
     local sprite = sprites[name]
-    return sprite.anim[sprite.frame]
+    if sprite == nil then
+        return nil
+    else
+        return sprite.anim[sprite.frame]
+    end
 end
 
 function inc_anim(sprite)
@@ -34,10 +38,15 @@ function inc_anim(sprite)
 end
 
 --animations {frame1, frame2...}
---slime_a = {0,0,2,2,4,4,6,6,4,4,2,2}
+puddle_a = {86,86,86,86,86,86,86,86,86,86,86,86,86,86,86,87,87,87,87,87,87,87,87,87,87,87,87,87,87,87,88,88,88,88,88,88,88,88,88,88,88,88,88,88,88}
+fire_a = {71,71,71,71,71,71,72,72,72,72,72,72,73,73,73,73,73,73}
+goal_a = {97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,105,105,105,105,105,105,105,105,105,105,105,105,105,105,105,97,97,97,97,97,97,97,97,97,97,97,97,97,97,97,106,106,106,106,106,106,106,106,106,106,106,106,106,106,106}
 
 sprites = {}
 --add_sprite("slime", slime_a)
+add_sprite("puddle", puddle_a)
+add_sprite("fire", fire_a)
+add_sprite("goal", goal_a)
 
 sprite_map = {none = 0,
               grass = 65,
@@ -145,6 +154,7 @@ end_delay = 30 --number of frames between each transition in the ending
 
 --status stuff
 mode = "title" --title, game, end
+timer = 0 --timer for anything that wants it
 end_timer = 0
 
 function add_snow(time)
@@ -465,20 +475,20 @@ function _draw()
         print("          clod's quest\n")
         
         print("get  , go to     while small\n\n")
-        spr(sprite_map.goal, 12, 11)
+        spr(get_sprite("goal"), 12, 11)
         spr(sprite_map.exit_closed, 50, 7, 2, 2)
         
         print("collect\n")
-        spr(sprite_map.puddle, 31, 28)
+        spr(get_sprite("puddle"), 31, 28)
         spr(sprite_map.leaf, 41, 28)
         spr(sprite_map.snow, 51, 28)
         spr(sprite_map.potion, 61, 28)
         
-        print("break   while big\n")
+        print("crush   while big\n")
         spr(sprite_map.pebble, 22, 40)
         
         print("avoid\n")
-        spr(sprite_map.fire, 24, 52)
+        spr(get_sprite("fire"), 24, 52)
         spr(sprite_map.spider, 34, 52)
         spr(sprite_map.beetle, 44, 52)
         
@@ -507,7 +517,7 @@ function _draw()
         
         --goal
         if not goal.collected then
-            spr(sprite_map.goal, goal.x, goal.y)
+            spr(get_sprite("goal"), goal.x, goal.y)
         end
         
         --exit
@@ -523,11 +533,22 @@ function _draw()
         local objects = array_concat({rocks, puddles, pebbles, fires, snows,
                                       potions, spiders, beetles, leafs})
         for object in all(objects) do
-            spr(sprite_map[object.name], object.x, object.y)
-            if debug then --bounding boxes
-                local r = object.rect
-                rect(r.x1, r.y1, r.x2, r.y2, 11)
+            local sprite = 0
+            if get_sprite(object.name) != nil then
+                sprite = get_sprite(object.name) --animated sprites
+            else
+                sprite = sprite_map[object.name] --static sprites
             end
+            local flip_x, flip_y = false, false
+            if object.name == "beetle" and object.dir == -1 then
+                flip_y = true
+            end
+            spr(sprite, object.x, object.y, 1, 1, flip_x, flip_y)
+            
+            --if debug then --bounding boxes
+                --local r = object.rect
+                --rect(r.x1, r.y1, r.x2, r.y2, 11)
+            --end
         end
         
         --mud
@@ -566,8 +587,12 @@ function _draw()
         print("       you are too heavy.\n")
         print("            the end")
         
+        local x, y = 56, 100 --bottom left of the 2x2 mud sprite
+        
+        --philosopher's stone
+        spr(96, x+20, y)
+        
         --ending animation
-        local x, y = 56, 100
         if end_timer <= end_delay then
             palt(0, false)
             palt(7, true)
@@ -594,6 +619,9 @@ function _update()
     for key,sprite in pairs(sprites) do
         inc_anim(sprite)
     end
+    
+    --update timer
+    timer += 1
     
     --start game
     if mode == "title" then
@@ -639,7 +667,7 @@ function _update()
     
     --update the rest of the game state only if the mud moved
     if moved then
-        --update timers
+        --update effect timers
         if potion > 0 then potion -= 1 end
         if snow > 0 then snow -= 1 end
         if leaf > 0 then leaf -= 1 end
@@ -794,14 +822,14 @@ __gfx__
 565556553b33b33366666665dddddd556655556655555555cccc7cccc7c7c7c7ccccccccccccccccdd155155f444474aa494444ff10100000001010f00000000
 655555653333b333566666555dddd5556666666556555565077cccc00c7c7c700cccccc0ccccccccd1555155f44449444494444ff01010101010101f00000000
 55555556333333336555556605dd55505665566655556555000ccc00000ccc00000ccc000ccc0cc005555550ffffff9999ffffffffffffffffffffff00000000
-00000000000000000000000000000b000000700000fff90000000000002277000777777000000000000000000000000000000000000000000000000000000000
-007a980000009000007f0fe00000b3b00070607007aaaa9000007000072222200070070000000000000000000000000000000000000000000000000000000000
-0affa980000a820007feeee2000bb3b00006c600faa99aa400007700772772270070070000000000000000000000000000000000000000000000000000000000
-89aa9982000f82000fee8ee200bb3bb0076c0c67fa9999a400076700222772220700007000000000000000000000000000000000000000000000000000000000
-89999982000f820000e8882000b3bb000006c6009a9999a407066607072222707cccccc700000000000000000000000000000000000000000000000000000000
-08999820000a8200000e8200003bb000007060709aa99aa40666d666000dd0007cccccc700000000000000000000000000000000000000000000000000000000
-0088820000009000000020000b0000000000700004aaaa200d6dd6d60006600007cccc7000000000000000000000000000000000000000000000000000000000
-000000000000000000000000b0000000000000000044420000ddddd0000770000077770000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000b000000700000fff90000000000002277000777777000009000000000000000000000000000000000000000000000000000
+007a980000009000007f0fe00000b3b00070607007aaaa90000070000722222000700700000a8200000000000000000000000000000000000000000000000000
+0affa980000a820007feeee2000bb3b00006c600faa99aa4000077007727722700700700000f8200000090000000000000000000000000000000000000000000
+89aa9982000f82000fee8ee200bb3bb0076c0c67fa9999a4000767002227722207000070000f8200000a82000000000000000000000000000000000000000000
+89999982000f820000e8882000b3bb000006c6009a9999a407066607072222707cccccc7000a8200000f82000000000000000000000000000000000000000000
+08999820000a8200000e8200003bb000007060709aa99aa40666d666000dd0007cccccc700009000000f82000000000000000000000000000000000000000000
+0088820000009000000020000b0000000000700004aaaa200d6dd6d60006600007cccc7000000000000a82000000000000000000000000000000000000000000
+000000000000000000000000b0000000000000000044420000ddddd0000770000077770000000000000090000000000000000000000000000000000000000000
 ffff11fffff11ffffff11fff000000000077770020111102000000000000000000000000000000000000000000000000000000000000000000000000cccceeee
 fffff11fff1111fffff11fff010000100778877020111102000000000000000000000000000000000000000000000000000000000000000000000000cccceeee
 11111111f1f11f1ff1f11f1f101dd1017781687722111122000000000000000000000000000000000000000000000000000000000000000000000000cccceeee

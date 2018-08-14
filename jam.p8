@@ -203,13 +203,10 @@ function init_level(level)
     leafs = get_map_objects("leaf", level)
     
     spiders = get_map_objects("spider", level)
-    for spider in all(spiders) do
-        spider.dir = 1
-    end
-    
     beetles = get_map_objects("beetle", level)
-    for beetle in all(beetles) do
-        beetle.dir = 1
+    for bug in all(array_concat({spiders, beetles})) do
+        bug.dir = 1
+        bug.from_x, bug.from_y = bug.x, bug.y
     end
 end
 
@@ -466,9 +463,10 @@ leaf = 0 --leaf timer
 spiders = {}
 
 function move_spider(spider)
+    spider.from_x, spider.from_y = spider.x, spider.y
     spider.x += spider.dir*spider_speed
     for rock in all(array_concat({rocks, pebbles})) do
-        if collide(get_rect(spider), rock.rect) then
+        if collide(get_rect(spider), rock.rect) then --turn around
             spider.dir *= -1
             spider.x += 2*spider.dir*spider_speed
         end
@@ -479,9 +477,10 @@ end
 beetles = {}
 
 function move_beetle(beetle)
+    beetle.from_x, beetle.from_y = beetle.x, beetle.y
     beetle.y += beetle.dir*beetle_speed
     for rock in all(array_concat({rocks, pebbles})) do
-        if collide(get_rect(beetle), rock.rect) then
+        if collide(get_rect(beetle), rock.rect) then --turn around
             beetle.dir *= -1
             beetle.y += 2*beetle.dir*beetle_speed
         end
@@ -550,8 +549,7 @@ function _draw()
         palt()
         
         --map objects (rocks, puddles...)
-        local objects = array_concat({rocks, puddles, pebbles, fires, snows,
-                                      potions, spiders, beetles, leafs})
+        local objects = array_concat({rocks, puddles, pebbles, fires, snows, potions, leafs})
         for object in all(objects) do
             local sprite = 0
             if get_sprite(object.name) != nil then
@@ -559,16 +557,38 @@ function _draw()
             else
                 sprite = sprite_map[object.name] --static sprites
             end
-            local flip_x, flip_y = false, false
-            if object.name == "beetle" and object.dir == -1 then
-                flip_y = true
-            end
-            spr(sprite, object.x, object.y, 1, 1, flip_x, flip_y)
+            spr(sprite, object.x, object.y, 1, 1)
             
             --if debug then --bounding boxes
                 --local r = object.rect
                 --rect(r.x1, r.y1, r.x2, r.y2, 11)
             --end
+        end
+        
+        --spiders and beetles
+        for bug in all(array_concat({spiders, beetles})) do
+            local flip_x, flip_y = false, false
+            if bug.name == "beetle" and bug.dir == -1 then flip_y = true end
+            if moving >= 0 then
+                local draw_x, draw_y = bug.from_x, bug.from_y
+                local portion = (moving_time - moving)/moving_time
+                if bug.name == "spider" then
+                    if bug.dir == 1 then --spider going right
+                        draw_x += abs(bug.x - bug.from_x)*portion
+                    elseif bug.dir == -1 then --spider going left
+                        draw_x -= abs(bug.x - bug.from_x)*portion
+                    end
+                elseif bug.name == "beetle" then
+                    if bug.dir == 1 then --beetle going down
+                        draw_y += abs(bug.y - bug.from_y)*portion
+                    elseif bug.dir == -1 then --beetle going up
+                        draw_y -= abs(bug.y - bug.from_y)*portion
+                    end
+                end
+                spr(sprite_map[bug.name], draw_x, draw_y, 1, 1, flip_x, flip_y)
+            else
+                spr(sprite_map[bug.name], bug.x, bug.y, 1, 1, flip_x, flip_y)
+            end
         end
         
         --mud
@@ -684,6 +704,7 @@ function _update()
     --if mud is not alive, then don't bother updating the game state
     if not mud.alive then return end
     
+    --only check for player movement if mud is not currently moving
     if moving <= -1 then
         --move mud
         local dir = ""
@@ -698,6 +719,11 @@ function _update()
         end
         if dir != "" then
             mud.move(dir)
+        end
+        
+        if moving > 0 then --move spiders and beetles if mud moved
+            foreach(spiders, move_spider)
+            foreach(beetles, move_beetle)
         end
     end
         
@@ -716,10 +742,6 @@ function _update()
         if potion > 0 then potion -= 1 end
         if snow > 0 then snow -= 1 end
         if leaf > 0 then leaf -= 1 end
-        
-        --move spiders and beetles
-        foreach(spiders, move_spider)
-        foreach(beetles, move_beetle)
         
         --break pebbles
         if mud.size >= pebble_break_size then

@@ -151,12 +151,12 @@ beetle_speed = 8 --number of pixels beetles move per step
 leaf_mult = 2 --how much the leaf multiplies the mud's speed by
 leaf_time = 10 --number of steps the leaf effect lasts for
 end_delay = 30 --number of frames between each transition in the ending
+moving_time = 5 --number of frames for moving animation
 
 --status stuff
 mode = "title" --title, game, end
 timer = 0 --timer for anything that wants it
 end_timer = 0
-moving = false --flag for walking animation
 
 function add_snow(time)
     snow += time
@@ -173,6 +173,13 @@ function add_leaf(time)
     sfx(22)
 end
 
+--moving animation stuff
+moving = 0 --timer for moving animation
+
+function start_moving()
+    moving = moving_time
+end
+
 --level stuff
 cur_level = -1
 
@@ -181,9 +188,7 @@ function init_level(level)
     snow = 0
     potion = 0
     leaf = 0
-    
-    --set status stuff
-    moving = false
+    moving = 0
     
     --set objects from map
     mud.reset(get_map_objects("none", level)[1])
@@ -278,14 +283,19 @@ mud = {name = "mud",
        speed = mud_speed,
        size = 8, --diameter in pixels
        growth = 0.5, --how much to grow radius each step in pixels
-       alive = true
+       alive = true,
+       dir = "up", --up, down, left, right; for moving animation
+       from_x = 0, from_y = 0, --original coordinates for moving animation
+       bonked = false --hit a wall while moving
        }
 
 mud.reset = function(m)
     mud.x, mud.y =  m.x, m.y
+    mud.from_x, mud.from_y = m.x, m.y
     mud.size = 8 --todo: set this per level? set this by multiple empty map spaces?
     mud.growth = 0.5 --todo: same as above
     mud.alive = true
+    mud.bonked = false
 end
 
 mud.get_rect = function()
@@ -316,13 +326,14 @@ mud.fits = function()
 end
 
 mud.move = function(dir)
-    --todo: if the mud can't move all the way, move as close as possible
+    mud.from_x, mud.from_y = mud.x, mud.y
+    
     local x, y = mud.x, mud.y
-    local speed = mud.speed
-    if leaf > 0 then speed *= leaf_mult end
+    mud.speed = mud_speed
+    if leaf > 0 then mud.speed *= leaf_mult end
     
     local moved = false
-    for i = 1,speed do
+    for i = 1,mud.speed do
         if dir == "up" then
             mud.y -= 1
         elseif dir == "down" then
@@ -338,10 +349,15 @@ mud.move = function(dir)
             x, y = mud.x, mud.y
         else
             mud.x, mud.y = x, y
-            sfx(17)
+            if moved then mud.bonked = true end
             break
         end
     end
+    
+    if moved then
+        mud.dir = dir
+        start_moving()
+        end
     
     return moved
 end
@@ -569,7 +585,22 @@ function _draw()
                 pal(4, 11) --brown to light green
                 pal(2, 3) --purple to dark green
             end
-            sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
+            if moving >= 0 then
+                local draw_x, draw_y = mud.from_x, mud.from_y
+                local portion = (moving_time - moving)/moving_time
+                if mud.dir == "up" then
+                    draw_y -= abs(mud.y - mud.from_y)*portion
+                elseif mud.dir == "down" then
+                    draw_y += abs(mud.y - mud.from_y)*portion
+                elseif mud.dir == "left" then
+                    draw_x -= abs(mud.x - mud.from_x)*portion
+                elseif mud.dir == "right" then
+                    draw_x += abs(mud.x - mud.from_x)*portion
+                end
+                sspr(64, 0, 24, 24, draw_x, draw_y, mud.size, mud.size)
+            else
+                sspr(64, 0, 24, 24, mud.x, mud.y, mud.size, mud.size)
+            end
             pal()
             palt()
         end
@@ -653,24 +684,34 @@ function _update()
     --if mud is not alive, then don't bother updating the game state
     if not mud.alive then return end
     
-    --move mud
-    local moved = false
-    local dir = ""
-    if btnp(0) then
-        dir = "left"
-    elseif btnp(1) then
-        dir = "right"
-    elseif btnp(2) then
-        dir = "up"
-    elseif btnp(3) then
-        dir = "down"
+    if moving <= -1 then
+        --move mud
+        local dir = ""
+        if btn(0) then
+            dir = "left"
+        elseif btn(1) then
+            dir = "right"
+        elseif btn(2) then
+            dir = "up"
+        elseif btn(3) then
+            dir = "down"
+        end
+        if dir != "" then
+            mud.move(dir)
+        end
     end
-    if dir != "" then
-        moved = mud.move(dir)
-    end
-    
-    --update the rest of the game state only if the mud moved
-    if moved then
+        
+    --do the "normal" game updates only if the mud just finished moving
+    if moving == 0 then
+        --moving is done
+        moving -= 1
+        
+        --play sound if mud hit a wall
+        if mud.bonked then
+            sfx(17)
+            mud.bonked = false
+        end
+        
         --update effect timers
         if potion > 0 then potion -= 1 end
         if snow > 0 then snow -= 1 end
@@ -774,6 +815,8 @@ function _update()
         if goal.collected and mud.size <= exit_size and collide(mud.get_rect(), exit.rect) then
             next_level()
         end
+    elseif moving > 0 then --do the moving animation updates
+        moving -= 1
     end
 end
 

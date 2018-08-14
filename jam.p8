@@ -156,6 +156,7 @@ end_delay = 30 --number of frames between each transition in the ending
 mode = "title" --title, game, end
 timer = 0 --timer for anything that wants it
 end_timer = 0
+moving = false --flag for walking animation
 
 function add_snow(time)
     snow += time
@@ -180,6 +181,9 @@ function init_level(level)
     snow = 0
     potion = 0
     leaf = 0
+    
+    --set status stuff
+    moving = false
     
     --set objects from map
     mud.reset(get_map_objects("none", level)[1])

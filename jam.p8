@@ -342,22 +342,38 @@ end
 
 mud.adjust = function(growth)
     --adjust the mud's position after growing by growth if it is inside a solid object
-    --which of the 4 cardinal directions the mud is stuck in
-    local left, right, up, down = false, false, false, false
-    local mud_rect = mud.get_rect()
-    for rock in all(array_concat({rocks, pebbles})) do
-        if collide(mud_rect, rock.rect) then
-            if rock.rect.x1 < mud_rect.x1 then left = true end
-            if rock.rect.x2 > mud_rect.x2 then right = true end
-            if rock.rect.y1 < mud_rect.y1 then up = true end
-            if rock.rect.y2 > mud_rect.y2 then down = true end
-        end
-    end
     
-    if up and not down then mud.y += growth end
-    if down and not up then mud.y -= growth end
-    if left and not right then mud.x += growth end
-    if right and not left then mud.x -= growth end
+    --don't do anything if mud is not stuck
+    if mud.fits() then return end
+    
+    --push up
+    mud.y -= growth
+    if mud.fits() then return end
+    --push up right
+    mud.x += growth
+    if mud.fits() then return end
+    --push right
+    mud.y += growth
+    if mud.fits() then return end
+    --push down right
+    mud.y += growth
+    if mud.fits() then return end
+    --push down
+    mud.x -= growth
+    if mud.fits() then return end
+    --push down left
+    mud.x -= growth
+    if mud.fits() then return end
+    --push left
+    mud.y -= growth
+    if mud.fits() then return end
+    --push up left
+    mud.y -= growth
+    if mud.fits() then return end
+    
+    --give up
+    mud.x += growth
+    mud.y += growth
 end
 
 mud.kill = function()

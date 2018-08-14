@@ -5,7 +5,7 @@ __lua__
 --by team spaghetti
 --cartdata("clods_quest")
 
-debug = true
+debug = false
 
 --helper functions
 function array_concat(arrays)

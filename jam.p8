@@ -5,7 +5,7 @@ __lua__
 --by team spaghetti
 --cartdata("clods_quest")
 
-debug = false
+debug = true
 
 --helper functions
 function array_concat(arrays)
@@ -188,7 +188,7 @@ function init_level(level)
     snow = 0
     potion = 0
     leaf = 0
-    moving = 0
+    moving = -1
     
     --set objects from map
     mud.reset(get_map_objects("none", level)[1])
